@@ -181,7 +181,7 @@ export default function EquipePage() {
               <tbody>
                 {pending.map((p) => (
                   <tr key={p.membershipId}>
-                    <td><div className="person"><Avatar name={p.name} /><div style={{ minWidth: 0 }}><strong>{p.name}</strong><small>{p.email}{p.phone ? ` · ${p.phone}` : ''}</small></div></div></td>
+                    <td><div className="person"><Avatar name={p.name} src={p.avatarUrl} /><div style={{ minWidth: 0 }}><strong>{p.name}</strong><small>{p.email}{p.phone ? ` · ${p.phone}` : ''}</small></div></div></td>
                     <td className="hide-mobile muted">pedido {relativeTime(p.createdAt)}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button type="button" className="btn btn-sm btn-ghost" onClick={() => decide(p, false)}><X size={15} />Recusar</button>
@@ -208,7 +208,7 @@ export default function EquipePage() {
               <tbody>
                 {members.map((m) => (
                   <tr key={m.membershipId}>
-                    <td><div className="person"><Avatar name={m.name} inverse={m.role === 'ADMIN'} /><div style={{ minWidth: 0 }}><strong>{m.name}{m.id === user?.id && <small style={{ display: 'inline', marginLeft: 6 }}>(você)</small>}</strong><small>{m.email}</small></div></div></td>
+                    <td><div className="person"><Avatar name={m.name} src={m.avatarUrl} inverse={m.role === 'ADMIN'} /><div style={{ minWidth: 0 }}><strong>{m.name}{m.id === user?.id && <small style={{ display: 'inline', marginLeft: 6 }}>(você)</small>}</strong><small>{m.email}</small></div></div></td>
                     <td><span className={`badge ${m.role === 'ADMIN' ? 'solid' : ''}`}>{m.role === 'ADMIN' ? <ShieldCheck size={12} /> : null}{ROLE_LABELS[m.role]}</span></td>
                     <td className="hide-mobile muted">{m.phone || '—'}</td>
                     <td><span className={`badge ${m.active ? 'soft' : 'strike'}`}>{m.active ? 'Ativo' : 'Inativo'}</span></td>

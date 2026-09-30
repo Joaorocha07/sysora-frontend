@@ -5,14 +5,34 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, Building2, CheckCircle2, KeyRound, Lock, Mail, Phone, User, Users } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
+import GoogleButton from '@/components/GoogleButton';
 import Logo from '@/components/Logo';
-import { Field, FormError } from '@/components/ui';
+import { Avatar, Field, FormError } from '@/components/ui';
 import { authApi, errorMessage, type PlanId } from '@/lib/api';
 import { homeFor, useAuth } from '@/lib/auth';
 import { maskPhone, money } from '@/lib/format';
 import { PLANS, TRIAL_DAYS } from '@/lib/plans';
+import { clearGoogleSignup, readGoogleSignup, type GoogleSignup } from '@/lib/supabase';
 
 type Kind = 'empresa' | 'equipe';
+
+// Voltou do Google sem conta: o e-mail já está confirmado e não precisa de senha.
+type GoogleProps = { google: GoogleSignup | null; onDropGoogle: () => void };
+
+function GoogleAccount({ google, onDropGoogle }: GoogleProps & { google: GoogleSignup }) {
+  return (
+    <Field label="E-mail de acesso">
+      <div className="google-connected">
+        <Avatar name={google.name} src={google.avatarUrl} size="sm" />
+        <span>Google: <strong>{google.email}</strong></span>
+        <button type="button" onClick={onDropGoogle}>Usar e-mail e senha</button>
+      </div>
+    </Field>
+  );
+}
+
+const credentialsFor = (google: GoogleSignup | null, form: { email: string; password: string }) =>
+  google ? { googleToken: google.signupToken } : { email: form.email, password: form.password };
 
 function PasswordFields({ password, confirm, onPassword, onConfirm }: { password: string; confirm: string; onPassword: (v: string) => void; onConfirm: (v: string) => void }) {
   return (
@@ -28,11 +48,11 @@ function PasswordFields({ password, confirm, onPassword, onConfirm }: { password
 }
 
 // Dono de empresa: escolhe o plano e começa o teste grátis já logado.
-function CompanyForm({ initialPlan }: { initialPlan: PlanId }) {
+function CompanyForm({ initialPlan, google, onDropGoogle }: { initialPlan: PlanId } & GoogleProps) {
   const router = useRouter();
   const { registerCompany } = useAuth();
   const [plan, setPlan] = useState<PlanId>(initialPlan);
-  const [form, setForm] = useState({ companyName: '', name: '', email: '', phone: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ companyName: '', name: google?.name ?? '', email: '', phone: '', password: '', confirm: '' });
   const [accepted, setAccepted] = useState(false);
   const [open, setOpen] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,11 +63,12 @@ function CompanyForm({ initialPlan }: { initialPlan: PlanId }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (form.password !== form.confirm) return setError('As senhas não conferem.');
+    if (!google && form.password !== form.confirm) return setError('As senhas não conferem.');
     setError(null);
     setBusy(true);
     try {
-      const session = await registerCompany({ plan, companyName: form.companyName, name: form.name, email: form.email, phone: form.phone || null, password: form.password });
+      const session = await registerCompany({ plan, companyName: form.companyName, name: form.name, phone: form.phone || null, ...credentialsFor(google, form) });
+      clearGoogleSignup();
       router.replace(homeFor(session));
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível concluir o cadastro.'));
@@ -83,10 +104,14 @@ function CompanyForm({ initialPlan }: { initialPlan: PlanId }) {
           <div className="input-icon"><Phone size={17} /><input className="input" inputMode="tel" value={form.phone} onChange={(e) => set('phone')(e.target.value)} placeholder="(11) 99999-9999" /></div>
         </Field>
       </div>
-      <Field label="E-mail de acesso">
-        <div className="input-icon"><Mail size={17} /><input className="input" type="email" required autoComplete="email" value={form.email} onChange={(e) => set('email')(e.target.value)} placeholder="voce@empresa.com.br" /></div>
-      </Field>
-      <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />
+      {google ? <GoogleAccount google={google} onDropGoogle={onDropGoogle} /> : (
+        <>
+          <Field label="E-mail de acesso">
+            <div className="input-icon"><Mail size={17} /><input className="input" type="email" required autoComplete="email" value={form.email} onChange={(e) => set('email')(e.target.value)} placeholder="voce@empresa.com.br" /></div>
+          </Field>
+          <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />
+        </>
+      )}
       <label className="row" style={{ alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
         <input type="checkbox" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} style={{ marginTop: 3 }} />
         <span className="muted">Li e aceito os termos de uso e a política de privacidade do Sysora.</span>
@@ -99,8 +124,8 @@ function CompanyForm({ initialPlan }: { initialPlan: PlanId }) {
 }
 
 // Funcionário: pede acesso com o código que o administrador passou.
-function EmployeeForm({ initialCode }: { initialCode: string }) {
-  const [form, setForm] = useState({ inviteCode: initialCode, name: '', email: '', phone: '', password: '', confirm: '' });
+function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: string } & GoogleProps) {
+  const [form, setForm] = useState({ inviteCode: initialCode, name: google?.name ?? '', email: '', phone: '', password: '', confirm: '' });
   const [company, setCompany] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,11 +143,12 @@ function EmployeeForm({ initialCode }: { initialCode: string }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (form.password !== form.confirm) return setError('As senhas não conferem.');
+    if (!google && form.password !== form.confirm) return setError('As senhas não conferem.');
     setError(null);
     setBusy(true);
     try {
-      const result = await authApi.registerEmployee({ inviteCode: form.inviteCode, name: form.name, email: form.email, phone: form.phone || null, password: form.password });
+      const result = await authApi.registerEmployee({ inviteCode: form.inviteCode, name: form.name, phone: form.phone || null, ...credentialsFor(google, form) });
+      clearGoogleSignup();
       setDone(result.message);
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível enviar o pedido.'));
@@ -158,10 +184,14 @@ function EmployeeForm({ initialCode }: { initialCode: string }) {
           <div className="input-icon"><Phone size={17} /><input className="input" inputMode="tel" value={form.phone} onChange={(e) => set('phone')(e.target.value)} placeholder="opcional" /></div>
         </Field>
       </div>
-      <Field label="E-mail" hint="Já tem conta no Sysora em outra empresa? Use o mesmo e-mail e a mesma senha.">
-        <div className="input-icon"><Mail size={17} /><input className="input" type="email" required autoComplete="email" value={form.email} onChange={(e) => set('email')(e.target.value)} /></div>
-      </Field>
-      <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />
+      {google ? <GoogleAccount google={google} onDropGoogle={onDropGoogle} /> : (
+        <>
+          <Field label="E-mail" hint="Já tem conta no Sysora em outra empresa? Use o mesmo e-mail e a mesma senha.">
+            <div className="input-icon"><Mail size={17} /><input className="input" type="email" required autoComplete="email" value={form.email} onChange={(e) => set('email')(e.target.value)} /></div>
+          </Field>
+          <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />
+        </>
+      )}
       <button className="btn btn-primary btn-lg btn-block" disabled={busy || company === ''}>
         {busy ? <span className="spinner" /> : 'Pedir acesso'}
       </button>
@@ -176,11 +206,21 @@ function SignupPage() {
   const initialCode = params.get('codigo') ?? '';
   const [kind, setKind] = useState<Kind>(params.get('tipo') === 'equipe' || initialCode ? 'equipe' : 'empresa');
   const initialPlan: PlanId = params.get('plano') === 'avancado' ? 'AVANCADO' : 'INICIAL';
+  const [google, setGoogle] = useState<GoogleSignup | null>(null);
 
   // Já logado: vai para o sistema.
   useEffect(() => {
     if (status === 'authenticated' && user) router.replace(homeFor({ user, company }));
   }, [status, user, company, router]);
+
+  // Voltou do Google sem conta (sessionStorage só existe no navegador).
+  useEffect(() => { setGoogle(readGoogleSignup()); }, []);
+
+  const dropGoogle = () => { clearGoogleSignup(); setGoogle(null); };
+  // Depois do Google, volta para esta mesma tela e aba.
+  const nextParams = new URLSearchParams(params.toString());
+  nextParams.set('tipo', kind);
+  const formKey = google?.email ?? 'senha';
 
   return (
     <div className="auth-card" style={{ width: 'min(520px, 100%)' }}>
@@ -197,7 +237,10 @@ function SignupPage() {
         <button type="button" style={{ flex: 1 }} className={kind === 'empresa' ? 'on' : ''} onClick={() => setKind('empresa')}><Building2 size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Sou dono(a)</button>
         <button type="button" style={{ flex: 1 }} className={kind === 'equipe' ? 'on' : ''} onClick={() => setKind('equipe')}><Users size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Sou da equipe</button>
       </div>
-      {kind === 'empresa' ? <CompanyForm initialPlan={initialPlan} /> : <EmployeeForm initialCode={initialCode} />}
+      {!google && <GoogleButton label="Cadastrar com Google" next={`/cadastro?${nextParams}`} />}
+      {kind === 'empresa'
+        ? <CompanyForm key={formKey} initialPlan={initialPlan} google={google} onDropGoogle={dropGoogle} />
+        : <EmployeeForm key={formKey} initialCode={initialCode} google={google} onDropGoogle={dropGoogle} />}
       <p className="muted" style={{ fontSize: 13, textAlign: 'center' }}>Já tem conta? <Link href="/login" style={{ color: 'var(--ink)', fontWeight: 600 }}>Entrar</Link></p>
     </div>
   );

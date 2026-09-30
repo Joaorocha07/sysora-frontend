@@ -82,8 +82,17 @@ export function FormError({ message }: { message: string | null }) {
 }
 
 // ============ Diversos ============
-export function Avatar({ name, size, inverse }: { name: string; size?: 'sm' | 'lg'; inverse?: boolean }) {
-  return <span className={`avatar${size ? ` ${size}` : ''}${inverse ? ' inverse' : ''}`}>{initials(name)}</span>;
+// Com `src` (foto do Google) mostra a foto; sem ela, ou se não carregar, as iniciais.
+export function Avatar({ name, size, inverse, src }: { name: string; size?: 'sm' | 'lg'; inverse?: boolean; src?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [src]);
+  const photo = src && !failed;
+  return (
+    <span className={`avatar${size ? ` ${size}` : ''}${inverse && !photo ? ' inverse' : ''}${photo ? ' photo' : ''}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {photo ? <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : initials(name)}
+    </span>
+  );
 }
 
 export function Empty({ icon, title, text, action }: { icon: ReactNode; title: string; text?: string; action?: ReactNode }) {

@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Building2, ChevronRight, Eye, Lock, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, ChevronRight, Lock, Mail } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
+import GoogleButton from '@/components/GoogleButton';
 import Logo from '@/components/Logo';
 import { Avatar, Field, FormError } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
@@ -13,12 +14,13 @@ import { ROLE_LABELS } from '@/lib/format';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status, user, company, login, chooseCompany, pendingCompanies, enterDemo } = useAuth();
+  const { status, user, company, login, chooseCompany, pendingCompanies } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [choosing, setChoosing] = useState(false);
+  // Volta do login com Google com várias empresas: a escolha já está pendente.
+  const [choosing, setChoosing] = useState(() => pendingCompanies !== null);
 
   // Já logado: vai direto para a área certa.
   useEffect(() => {
@@ -38,12 +40,6 @@ export default function LoginPage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function demo(mode: 'empresa' | 'master') {
-    setChoosing(false);
-    const session = await enterDemo(mode);
-    router.replace(homeFor(session));
   }
 
   async function pick(companyId: string) {
@@ -92,6 +88,7 @@ export default function LoginPage() {
           <p className="muted" style={{ marginTop: 8 }}>Entre com o e-mail e a senha cadastrados pela sua empresa.</p>
         </div>
         <FormError message={error} />
+        <GoogleButton />
         <Field label="E-mail">
           <div className="input-icon">
             <Mail size={17} />
@@ -115,14 +112,6 @@ export default function LoginPage() {
           <Link href="/cadastro" style={{ color: 'var(--ink)', fontWeight: 600 }}>Cadastre sua empresa</Link> ou{' '}
           <Link href="/cadastro?tipo=equipe" style={{ color: 'var(--ink)', fontWeight: 600 }}>entre na equipe</Link>.
         </p>
-        <div className="demo-box">
-          <div className="row"><Eye size={16} /><strong>Só quer conhecer?</strong></div>
-          <small>Navegue com dados fictícios, sem precisar de conta nem do servidor.</small>
-          <div className="row">
-            <button type="button" className="btn btn-sm btn-outline" style={{ flex: 1 }} onClick={() => demo('empresa')}>Painel da empresa</button>
-            <button type="button" className="btn btn-sm btn-outline" style={{ flex: 1 }} onClick={() => demo('master')}>Painel master</button>
-          </div>
-        </div>
       </form>
     </AuthLayout>
   );

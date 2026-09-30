@@ -182,7 +182,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
             <div className="sidebar-user">
-              <Avatar name={user.name} size="sm" />
+              <Avatar name={user.name} src={user.avatarUrl} size="sm" />
               <div style={{ minWidth: 0 }}>
                 <strong>{user.name}</strong>
                 <small>{user.isSuperAdmin ? 'Admin master' : role ? ROLE_LABELS[role] : ''}</small>
@@ -233,7 +233,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <ThemeToggle />
             <div className="dropdown">
               <button type="button" className="row" style={{ background: 'none', border: 0, padding: 0 }} onClick={() => setMenu(menu === 'user' ? null : 'user')} aria-label="Conta">
-                <Avatar name={user.name} />
+                <Avatar name={user.name} src={user.avatarUrl} />
                 <span className="hide-mobile" style={{ fontWeight: 600 }}>{firstName(user.name)}</span>
                 <ChevronDown size={15} className="hide-mobile" />
               </button>

@@ -2,7 +2,7 @@
 // backend. Ativado pelo botão "Ver demonstração" (localStorage 'sysora-demo').
 // Os dados são gerados a partir da data de hoje e somem ao recarregar a página.
 import type {
-  AdminCompany, Appointment, AppointmentStatus, Client, Conversation, Member, Message, Service, Session, Settings, Subscription,
+  AdminCompany, AdminUser, Appointment, AppointmentStatus, Client, Conversation, Member, Message, Service, Session, Settings, Subscription,
 } from './api';
 import { PLANS } from './plans';
 
@@ -72,12 +72,12 @@ function build() {
     lastMessageAt: i < 7 ? ago(i * 47 + 3) : null, unreadCount: i < 3 ? 3 - i : 0, createdAt: ago(60 * 24 * (i * 3 + 1)),
   }));
   const members: Member[] = [
-    { membershipId: 'm1', id: 'demo-user', name: 'Você (demonstração)', email: 'voce@studioaurora.com', phone: null, role: 'ADMIN', active: true, createdAt: ago(60 * 24 * 40) },
-    { membershipId: 'm2', id: 'u2', name: 'Paula Ribeiro', email: 'paula@studioaurora.com', phone: '(31) 98888-1111', role: 'EMPLOYEE', active: true, createdAt: ago(60 * 24 * 20) },
-    { membershipId: 'm3', id: 'u3', name: 'Rafael Gomes', email: 'rafael@studioaurora.com', phone: null, role: 'EMPLOYEE', active: true, createdAt: ago(60 * 24 * 9) },
+    { membershipId: 'm1', id: 'demo-user', name: 'Você (demonstração)', email: 'voce@studioaurora.com', phone: null, avatarUrl: null, role: 'ADMIN', active: true, createdAt: ago(60 * 24 * 40) },
+    { membershipId: 'm2', id: 'u2', name: 'Paula Ribeiro', email: 'paula@studioaurora.com', phone: '(31) 98888-1111', avatarUrl: null, role: 'EMPLOYEE', active: true, createdAt: ago(60 * 24 * 20) },
+    { membershipId: 'm3', id: 'u3', name: 'Rafael Gomes', email: 'rafael@studioaurora.com', phone: null, avatarUrl: null, role: 'EMPLOYEE', active: true, createdAt: ago(60 * 24 * 9) },
   ];
   const pending: Member[] = [
-    { membershipId: 'm4', id: 'u4', name: 'Sofia Andrade', email: 'sofia@gmail.com', phone: '(31) 97777-2222', role: 'EMPLOYEE', active: true, createdAt: ago(90) },
+    { membershipId: 'm4', id: 'u4', name: 'Sofia Andrade', email: 'sofia@gmail.com', phone: '(31) 97777-2222', avatarUrl: null, role: 'EMPLOYEE', active: true, createdAt: ago(90) },
   ];
 
   const plan: [number, string, string[], AppointmentStatus, 'BOT' | 'STAFF'][] = [
@@ -148,7 +148,7 @@ function build() {
         trialEndsAt: status === 'TRIAL' ? sub.trialEndsAt : null, paidUntil: status === 'TRIAL' ? null : new Date(Date.now() + (status === 'PAST_DUE' ? -2 : 18) * 86400000).toISOString(),
         maxCompanies: p.maxCompanies, maxEmployees: p.maxEmployees },
       whatsappConnected: i !== 3, whatsappPhone: i !== 3 ? `553199${i}001234` : null, users: 2 + i,
-      admins: [{ id: `adm-${i}`, name: ['Você (demonstração)', 'Dra. Helena Prado', 'Carlos Navalha', 'Juliana Pet'][i], email: `admin${i}@exemplo.com` }],
+      admins: [{ id: `adm-${i}`, name: ['Você (demonstração)', 'Dra. Helena Prado', 'Carlos Navalha', 'Juliana Pet'][i], email: `admin${i}@exemplo.com`, avatarUrl: null }],
       clients: clientsCount as number, appointments: appts as number, services: 4 + i,
     };
   });
@@ -172,7 +172,7 @@ function session(): Session {
   const company = data().companyIdx === -1 ? null : DEMO_COMPANIES[data().companyIdx];
   return {
     accessToken: 'demo',
-    user: { id: 'demo-user', name: master ? 'Admin Master (demonstração)' : 'Você (demonstração)', email: 'demo@sysora.com.br', isSuperAdmin: master },
+    user: { id: 'demo-user', name: master ? 'Admin Master (demonstração)' : 'Você (demonstração)', email: 'demo@sysora.com.br', isSuperAdmin: master, avatarUrl: null },
     company,
     role: company ? 'ADMIN' : null,
     subscription: company ? data().sub : null,
@@ -308,6 +308,22 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
     return { companies: d.adminCompanies.length, accounts: d.adminCompanies.length, payingAccounts: paying.length, trialAccounts: 1, mrrCents: paying.reduce((s, c) => s + c.subscription.priceCents, 0), users: 14, clients: 272, appointmentsThisMonth: 318, whatsappConnected: 3 };
   }
   if (path === '/admin/companies' && method === 'GET') return { companies: d.adminCompanies };
+  if (path === '/admin/users') {
+    const users: AdminUser[] = d.adminCompanies.flatMap((c, i) => c.admins.map((a) => ({
+      ...a, phone: null, isSuperAdmin: false, active: true, google: i % 2 === 0, lastLoginAt: ago(60 * (i * 9 + 2)), createdAt: c.createdAt,
+      companies: [{ id: c.id, name: c.name, companyActive: c.active, role: 'ADMIN' as const, status: 'ACTIVE' as const, active: true }],
+    })));
+    const studio = d.adminCompanies[0];
+    for (const m of [...d.members.slice(1), ...d.pending]) {
+      const status = d.pending.includes(m) ? 'PENDING' as const : 'ACTIVE' as const;
+      users.push({
+        id: m.id, name: m.name, email: m.email, phone: m.phone, avatarUrl: null, isSuperAdmin: false, active: true, google: false,
+        lastLoginAt: status === 'ACTIVE' ? ago(60 * 5) : null, createdAt: m.createdAt,
+        companies: [{ id: studio.id, name: studio.name, companyActive: true, role: m.role, status, active: true }],
+      });
+    }
+    return { users };
+  }
   if (path.startsWith('/admin/')) {
     if ((r = m(/^\/admin\/accounts\/([^/]+)\/payment$/))) {
       const co = d.adminCompanies.find((c) => c.subscription.accountId === r![1])!;
@@ -330,7 +346,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
       const p = PLANS.find((x) => x.id === body.plan)!;
       d.adminCompanies.unshift({
         ...d.adminCompanies[1], id: id(), name: String(body.name), selfSignup: false, clients: 0, appointments: 0, services: 0, users: 1, whatsappConnected: false, whatsappPhone: null,
-        createdAt: new Date().toISOString(), admins: [{ id: id(), name: String((body.admin as { name: string }).name), email: String((body.admin as { email: string }).email) }],
+        createdAt: new Date().toISOString(), admins: [{ id: id(), name: String((body.admin as { name: string }).name), email: String((body.admin as { email: string }).email), avatarUrl: null }],
         subscription: { ...d.sub, accountId: id(), plan: p.id, planName: p.name, priceCents: p.priceCents, status: body.trial ? 'TRIAL' : 'ACTIVE' },
       });
       return { adminAlreadyExisted: false };
@@ -426,7 +442,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   if (path === '/users/pending') return { users: d.pending };
   if (path === '/users' && method === 'POST') {
     if (d.members.length >= d.sub.maxEmployees + 1) fail(`O plano ${d.sub.planName} permite o administrador e até ${d.sub.maxEmployees} funcionários ativos por empresa.`, 403);
-    const member: Member = { membershipId: id(), id: id(), name: String(body.name), email: String(body.email), phone: (body.phone as string) || null, role: body.role as Member['role'], active: true, createdAt: new Date().toISOString() };
+    const member: Member = { membershipId: id(), id: id(), name: String(body.name), email: String(body.email), phone: (body.phone as string) || null, avatarUrl: null, role: body.role as Member['role'], active: true, createdAt: new Date().toISOString() };
     d.members.push(member);
     return { user: member };
   }

@@ -8,7 +8,8 @@ export type AppointmentStatus = 'SCHEDULED' | 'CONFIRMED' | 'COMPLETED' | 'CANCE
 export type Source = 'BOT' | 'STAFF';
 export type MessageSender = 'CLIENT' | 'BOT' | 'STAFF';
 
-export type AuthUser = { id: string; name: string; email: string; isSuperAdmin: boolean };
+// avatarUrl: foto do Google (nula para quem só entra com e-mail e senha).
+export type AuthUser = { id: string; name: string; email: string; isSuperAdmin: boolean; avatarUrl: string | null };
 export type AuthCompany = { id: string; name: string; slug: string };
 export type CompanyChoice = AuthCompany & { role: Role };
 export type PlanId = 'INICIAL' | 'AVANCADO';
@@ -20,8 +21,10 @@ export type Subscription = {
 export type PlanInfo = { id: PlanId; name: string; priceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
 export type Session = { accessToken: string; user: AuthUser; company: AuthCompany | null; role: Role | null; subscription: Subscription | null };
 export type LoginResponse = Session | { status: 'select-company'; preAuthToken: string; companies: CompanyChoice[] };
+// Login com Google de um e-mail sem conta: o token conclui o cadastro sem senha.
+export type GoogleLoginResponse = LoginResponse | { status: 'signup-required'; signupToken: string; email: string; name: string; avatarUrl: string | null };
 
-export type Member = { membershipId: string; id: string; name: string; email: string; phone: string | null; role: Role; active: boolean; createdAt: string };
+export type Member = { membershipId: string; id: string; name: string; email: string; phone: string | null; avatarUrl: string | null; role: Role; active: boolean; createdAt: string };
 
 export type Client = {
   id: string; name: string; phone: string; email: string | null; birthday: string | null; notes: string | null;
@@ -76,7 +79,13 @@ export type Dashboard = {
 export type AdminCompany = {
   id: string; name: string; slug: string; document: string | null; phone: string | null; email: string | null;
   subscription: Subscription; active: boolean; selfSignup: boolean; inviteCode: string; createdAt: string; whatsappConnected: boolean; whatsappPhone: string | null;
-  users: number; admins: { id: string; name: string; email: string }[]; clients: number; appointments: number; services: number;
+  users: number; admins: { id: string; name: string; email: string; avatarUrl: string | null }[]; clients: number; appointments: number; services: number;
+};
+// Pessoa cadastrada no Sysora (painel master > Usuários).
+export type AdminUser = {
+  id: string; name: string; email: string; phone: string | null; avatarUrl: string | null;
+  isSuperAdmin: boolean; active: boolean; google: boolean; lastLoginAt: string | null; createdAt: string;
+  companies: { id: string; name: string; companyActive: boolean; role: Role; status: 'PENDING' | 'ACTIVE'; active: boolean }[];
 };
 export type AdminStats = {
   companies: number; accounts: number; payingAccounts: number; trialAccounts: number; mrrCents: number;
@@ -172,8 +181,10 @@ function keep(session: Session): Session {
 }
 
 // ============ Endpoints ============
-export type RegisterCompanyInput = { plan: PlanId; companyName: string; name: string; email: string; phone?: string | null; password: string };
-export type RegisterEmployeeInput = { inviteCode: string; name: string; email: string; phone?: string | null; password: string };
+// Cadastro com e-mail e senha, ou com o googleToken do login com Google.
+type Credentials = { email: string; password: string } | { googleToken: string };
+export type RegisterCompanyInput = { plan: PlanId; companyName: string; name: string; phone?: string | null } & Credentials;
+export type RegisterEmployeeInput = { inviteCode: string; name: string; phone?: string | null } & Credentials;
 
 export const authApi = {
   signupConfig: () => get<{ companySignup: boolean }>('/auth/signup-config'),
@@ -182,6 +193,10 @@ export const authApi = {
   lookupInvite: (code: string) => get<{ name: string }>(`/auth/invite/${encodeURIComponent(code)}`),
   async login(email: string, password: string): Promise<LoginResponse> {
     const result = await send<LoginResponse>('POST', '/auth/login', { email, password });
+    return 'accessToken' in result ? keep(result) : result;
+  },
+  async google(accessToken: string): Promise<GoogleLoginResponse> {
+    const result = await send<GoogleLoginResponse>('POST', '/auth/google', { accessToken });
     return 'accessToken' in result ? keep(result) : result;
   },
   loginCompany: async (preAuthToken: string, companyId: string) => keep(await send<Session>('POST', '/auth/login/company', { preAuthToken, companyId })),
@@ -198,6 +213,7 @@ export type CompanyInput = { name: string; document?: string | null; phone?: str
 export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEndsAt?: string | null; paidUntil?: string | null };
 export const adminApi = {
   stats: () => get<AdminStats>('/admin/stats'),
+  users: () => get<{ users: AdminUser[] }>('/admin/users').then((r) => r.users),
   companies: () => get<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies),
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>
     send<{ adminAlreadyExisted: boolean }>('POST', '/admin/companies', input),

@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { startDemo, type DemoMode } from './demo';
-import { authApi, subscribeSession, type RegisterCompanyInput, type Subscription, type AuthCompany, type AuthUser, type CompanyChoice, type Role, type Session } from './api';
+import { authApi, subscribeSession, type LoginResponse, type RegisterCompanyInput, type Subscription, type AuthCompany, type AuthUser, type CompanyChoice, type Role, type Session } from './api';
+import type { GoogleSignup } from './supabase';
 
 type Status = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -20,6 +21,9 @@ type AuthContextValue = {
   // Login de quem tem acesso a várias empresas: aguardando a escolha.
   pendingCompanies: CompanyChoice[] | null;
   login: (email: string, password: string) => Promise<Session | 'select-company'>;
+  // Login com o access token do Supabase (volta do Google). E-mail sem conta
+  // devolve os dados para concluir o cadastro.
+  loginWithGoogle: (accessToken: string) => Promise<Session | 'select-company' | GoogleSignup>;
   chooseCompany: (companyId: string) => Promise<Session>;
   switchCompany: (companyId: string | null) => Promise<Session>;
   // Cadastro de uma empresa nova: já entra como administrador.
@@ -51,8 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscribeSession(null);
   }, [apply]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await authApi.login(email, password);
+  const startSession = useCallback((result: LoginResponse) => {
     if ('accessToken' in result) {
       apply(result);
       setPending(null);
@@ -61,6 +64,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPending({ token: result.preAuthToken, companies: result.companies });
     return 'select-company' as const;
   }, [apply]);
+
+  const login = useCallback(async (email: string, password: string) => startSession(await authApi.login(email, password)), [startSession]);
+
+  const loginWithGoogle = useCallback(async (accessToken: string) => {
+    const result = await authApi.google(accessToken);
+    if ('status' in result && result.status === 'signup-required') {
+      setPending(null);
+      return { signupToken: result.signupToken, email: result.email, name: result.name, avatarUrl: result.avatarUrl };
+    }
+    return startSession(result);
+  }, [startSession]);
 
   const chooseCompany = useCallback(async (companyId: string) => {
     if (!pending) throw new Error('Faça login novamente.');
@@ -109,8 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAdmin: session?.role === 'ADMIN',
     subscription: session?.subscription ?? null,
     pendingCompanies: pending?.companies ?? null,
-    login, chooseCompany, switchCompany, registerCompany, enterDemo, reloadSession, logout,
-  }), [status, session, pending, login, chooseCompany, switchCompany, registerCompany, enterDemo, reloadSession, logout]);
+    login, loginWithGoogle, chooseCompany, switchCompany, registerCompany, enterDemo, reloadSession, logout,
+  }), [status, session, pending, login, loginWithGoogle, chooseCompany, switchCompany, registerCompany, enterDemo, reloadSession, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

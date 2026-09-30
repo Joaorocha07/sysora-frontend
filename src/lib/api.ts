@@ -211,8 +211,13 @@ export const authApi = {
 
 export type CompanyInput = { name: string; document?: string | null; phone?: string | null; email?: string | null };
 export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEndsAt?: string | null; paidUntil?: string | null };
+// Configurações da plataforma, editadas pelo admin master.
+export type PlatformSettings = { publicSignupEnabled: boolean };
 export const adminApi = {
   stats: () => get<AdminStats>('/admin/stats'),
+  settings: () => get<{ settings: PlatformSettings }>('/admin/settings').then((r) => r.settings),
+  updateSettings: (input: Partial<PlatformSettings>) =>
+    send<{ settings: PlatformSettings }>('PATCH', '/admin/settings', input).then((r) => r.settings),
   users: () => get<{ users: AdminUser[] }>('/admin/users').then((r) => r.users),
   companies: () => get<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies),
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Building2, ChevronDown, LogOut, Menu, ShieldCheck, Users, X } from 'lucide-react';
+import { Building2, ChevronDown, LogOut, Menu, Settings, ShieldCheck, Users, X } from 'lucide-react';
 import Logo from '@/components/Logo';
 import LogoutDialog from '@/components/LogoutDialog';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -14,6 +14,7 @@ import { firstName } from '@/lib/format';
 const MASTER_NAV = [
   { href: '/master', label: 'Empresas e assinaturas', icon: Building2 },
   { href: '/master/usuarios', label: 'Usuários', icon: Users },
+  { href: '/master/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 export default function MasterLayout({ children }: { children: React.ReactNode }) {
@@ -91,6 +92,7 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
                   <small>{user.email}</small>
                 </div>
                 <div className="divider" />
+                <Link href="/master/configuracoes"><Settings size={16} />Minha conta</Link>
                 <button type="button" onClick={signOut}><LogOut size={16} />Sair</button>
               </div>
             )}

@@ -7,6 +7,8 @@ import type {
 import { PLANS } from './plans';
 
 export type DemoMode = 'empresa' | 'master';
+// Configuração "cadastro pelo site" do painel master na demonstração.
+let demoPublicSignup = true;
 const KEY = 'sysora-demo';
 const COMPANY_KEY = 'sysora-demo-company';
 
@@ -284,7 +286,11 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   }
   if (path === '/auth/companies') return { companies: DEMO_COMPANIES.map((c) => ({ ...c, role: 'ADMIN' })) };
   if (path === '/auth/change-password') return { message: 'Senha alterada (demonstração).' };
-  if (path === '/auth/signup-config') return { companySignup: true };
+  if (path === '/auth/signup-config') return { companySignup: demoPublicSignup };
+  if (path === '/admin/settings') {
+    if (method === 'PATCH' && typeof body.publicSignupEnabled === 'boolean') demoPublicSignup = body.publicSignupEnabled;
+    return { settings: { publicSignupEnabled: demoPublicSignup } };
+  }
   if (path.startsWith('/auth/')) fail('Indisponível no modo demonstração.');
 
   // Assinatura

@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { Building2, Clock, KeyRound, Save } from 'lucide-react';
+import AccountForm from '@/components/AccountForm';
 import { Field, FormError, Loading, PageHead, Switch, useToast } from '@/components/ui';
-import { authApi, errorMessage, settingsApi, type CompanyProfile, type Settings } from '@/lib/api';
+import { errorMessage, settingsApi, type CompanyProfile, type Settings } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { WEEKDAYS, maskPhone } from '@/lib/format';
 
@@ -107,48 +108,6 @@ function HoursForm({ settings, onSaved }: { settings: Settings; onSaved: (s: Set
       )}
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-primary" disabled={busy}>{busy ? <span className="spinner" /> : <Save size={16} />}Salvar horários</button>
-      </div>
-    </form>
-  );
-}
-
-function AccountForm() {
-  const { user } = useAuth();
-  const toast = useToast();
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (next !== confirm) return setError('As senhas novas não conferem.');
-    setError(null);
-    setBusy(true);
-    try {
-      await authApi.changePassword(current, next);
-      toast('Senha alterada.');
-      setCurrent(''); setNext(''); setConfirm('');
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="card card-pad stack" onSubmit={submit} style={{ maxWidth: 560 }}>
-      <div><h3>{user?.name}</h3><small>{user?.email}</small></div>
-      <div className="divider" />
-      <FormError message={error} />
-      <Field label="Senha atual"><input className="input" type="password" required autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} /></Field>
-      <div className="grid-2">
-        <Field label="Nova senha" hint="Mínimo de 8 caracteres."><input className="input" type="password" required minLength={8} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
-        <Field label="Confirme a nova senha"><input className="input" type="password" required minLength={8} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
-      </div>
-      <div className="row" style={{ justifyContent: 'flex-end' }}>
-        <button className="btn btn-primary" disabled={busy}>{busy ? <span className="spinner" /> : <KeyRound size={16} />}Alterar senha</button>
       </div>
     </form>
   );

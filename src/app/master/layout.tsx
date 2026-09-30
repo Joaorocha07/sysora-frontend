@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Building2, ChevronDown, LogOut, Menu, ShieldCheck, Users, X } from 'lucide-react';
 import Logo from '@/components/Logo';
+import LogoutDialog from '@/components/LogoutDialog';
 import ThemeToggle from '@/components/ThemeToggle';
 import { Avatar, Loading } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
@@ -18,9 +19,10 @@ const MASTER_NAV = [
 export default function MasterLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { status, user, logout } = useAuth();
+  const { status, user } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.replace('/login');
@@ -29,9 +31,9 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => { setNavOpen(false); setMenuOpen(false); }, [pathname]);
 
-  async function signOut() {
-    await logout();
-    router.replace('/login');
+  function signOut() {
+    setMenuOpen(false);
+    setConfirmingLogout(true);
   }
 
   if (status !== 'authenticated' || !user?.isSuperAdmin) return <Loading />;
@@ -97,6 +99,7 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
 
         <main className="main">{children}</main>
       </div>
+      {confirmingLogout && <LogoutDialog onClose={() => setConfirmingLogout(false)} />}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   Settings, ShieldCheck, Sparkles, Users, UserCog, Wrench, X,
 } from 'lucide-react';
 import Logo from './Logo';
+import LogoutDialog from './LogoutDialog';
 import ThemeToggle from './ThemeToggle';
 import { Avatar, Loading, useToast } from './ui';
 import { authApi, conversationsApi, errorMessage, subscribeSubscriptionBlocked, usersApi, whatsappApi, type CompanyChoice, type Subscription } from '@/lib/api';
@@ -78,7 +79,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const toast = useToast();
-  const { status, user, company, role, isAdmin, subscription, switchCompany, logout, reloadSession } = useAuth();
+  const { status, user, company, role, isAdmin, subscription, switchCompany, reloadSession } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [menu, setMenu] = useState<'company' | 'user' | null>(null);
   const [companies, setCompanies] = useState<CompanyChoice[]>([]);
@@ -86,6 +87,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [pendingUsers, setPendingUsers] = useState(0);
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
   const [demo, setDemo] = useState(false);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   const current = ALL_NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
   const forbidden = Boolean(current?.adminOnly && !isAdmin);
@@ -136,9 +138,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signOut() {
-    await logout();
-    router.replace('/login');
+  function signOut() {
+    setMenu(null);
+    setConfirmingLogout(true);
   }
 
   if (status !== 'authenticated' || !company || !user || forbidden || blocked) return <Loading />;
@@ -271,6 +273,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <main className="main">{children}</main>
         </div>
       </div>
+      {confirmingLogout && <LogoutDialog onClose={() => setConfirmingLogout(false)} />}
     </ShellContext.Provider>
   );
 }

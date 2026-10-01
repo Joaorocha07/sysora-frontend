@@ -33,7 +33,13 @@ function maskCpf(v: string) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mpStyle: any = {
-  base: { fontSize: '15px', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#0a0a0a' },
+  base: {
+    width: '100%',
+    height: '42px',
+    fontSize: '15px',
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    color: '#0a0a0a',
+  },
   placeholder: { color: '#a3a3a3' },
 };
 
@@ -306,7 +312,7 @@ function CheckoutContent() {
                     <span>Número do cartão</span>
                     <div className="input-icon">
                       <CreditCard size={17} />
-                      <div className="input" style={{ display: 'flex', alignItems: 'center' }}>
+                      <div className="input checkout-secure-field">
                         <CardNumber placeholder="1234 5678 9012 3456" style={mpStyle} />
                       </div>
                     </div>
@@ -316,7 +322,7 @@ function CheckoutContent() {
                       <span>Validade</span>
                       <div className="input-icon">
                         <CalendarDays size={17} />
-                        <div className="input" style={{ display: 'flex', alignItems: 'center' }}>
+                        <div className="input checkout-secure-field">
                           <ExpirationDate placeholder="MM/AA" style={mpStyle} />
                         </div>
                       </div>
@@ -325,7 +331,7 @@ function CheckoutContent() {
                       <span>CVV</span>
                       <div className="input-icon">
                         <Lock size={17} />
-                        <div className="input" style={{ display: 'flex', alignItems: 'center' }}>
+                        <div className="input checkout-secure-field">
                           <SecurityCode placeholder="123" style={mpStyle} />
                         </div>
                       </div>

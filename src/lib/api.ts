@@ -250,7 +250,7 @@ export type PixData = {
 
 export const subscriptionsApi = {
   checkout: (body: { cardTokenId: string; payerEmail: string; plan: PlanId; installments?: number; paymentMethodId?: string }) =>
-    send<{ subscription: Subscription }>('POST', '/subscriptions/checkout', body).then((r) => r.subscription),
+    send<{ subscription: Subscription; pending: boolean }>('POST', '/subscriptions/checkout', body),
   cancel: () =>
     send<{ subscription: Subscription }>('POST', '/subscriptions/cancel').then((r) => r.subscription),
   status: () => get<MpSubscriptionStatus>('/subscriptions/status'),

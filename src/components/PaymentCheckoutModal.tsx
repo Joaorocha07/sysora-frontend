@@ -15,7 +15,7 @@ interface Props {
   plan: { id: PlanId; name: string; priceCents: number };
   payerEmail: string;
   onClose: () => void;
-  onSuccess: (sub: Awaited<ReturnType<typeof subscriptionsApi.checkout>>) => void;
+  onSuccess: (sub: Awaited<ReturnType<typeof subscriptionsApi.checkout>>['subscription']) => void;
 }
 
 type MpFormData = {
@@ -26,17 +26,19 @@ type MpFormData = {
 export function PaymentCheckoutModal({ plan, payerEmail, onClose, onSuccess }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [pending, setPending] = useState(false);
 
   async function handleSubmit(formData: MpFormData) {
     setError(null);
     try {
-      const sub = await subscriptionsApi.checkout({
+      const { subscription, pending: inReview } = await subscriptionsApi.checkout({
         cardTokenId: formData.token,
         payerEmail: formData.payer?.email || payerEmail,
         plan: plan.id,
       });
       setSuccess(true);
-      onSuccess(sub);
+      setPending(inReview);
+      onSuccess(subscription);
     } catch (err) {
       const msg = errorMessage(err);
       setError(msg);
@@ -54,9 +56,11 @@ export function PaymentCheckoutModal({ plan, payerEmail, onClose, onSuccess }: P
       {success ? (
         <div className="stack" style={{ alignItems: 'center', padding: '32px 0', gap: 12 }}>
           <CheckCircle size={40} style={{ color: 'var(--color-success, #22c55e)' }} />
-          <strong>Assinatura ativada com sucesso!</strong>
+          <strong>{pending ? 'Pagamento em análise' : 'Assinatura ativada com sucesso!'}</strong>
           <p className="muted" style={{ textAlign: 'center' }}>
-            Seu plano {plan.name} já está ativo. O cartão será cobrado automaticamente todo mês.
+            {pending
+              ? `Seu plano ${plan.name} será ativado assim que o Mercado Pago confirmar a cobrança.`
+              : `Seu plano ${plan.name} já está ativo. O cartão será cobrado automaticamente todo mês.`}
           </p>
         </div>
       ) : (

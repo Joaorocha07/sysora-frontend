@@ -62,6 +62,8 @@ function CheckoutContent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(false);
+  // Cartão aceito, mas o MP ainda está processando a primeira cobrança.
+  const [pending, setPending] = useState(false);
 
   const [cardholderName, setCardholderName] = useState('');
   const [cpf, setCpf] = useState('');
@@ -119,7 +121,8 @@ function CheckoutContent() {
       });
       if (!token?.id) throw new Error('Não foi possível tokenizar o cartão. Verifique os dados e tente novamente.');
       const paymentMethodId = (token as Record<string, unknown>).payment_method_id as string | undefined;
-      await subscriptionsApi.checkout({ cardTokenId: token.id, payerEmail: user.email, plan: plan.id, installments, paymentMethodId });
+      const result = await subscriptionsApi.checkout({ cardTokenId: token.id, payerEmail: user.email, plan: plan.id, installments, paymentMethodId });
+      setPending(result.pending);
       setSuccess(true);
       await reloadSession();
       setTimeout(() => router.push('/assinatura'), 3000);
@@ -169,8 +172,12 @@ function CheckoutContent() {
               <CheckCircle size={36} />
             </div>
             <div>
-              <h2 style={{ fontSize: 26, marginBottom: 8 }}>Pagamento confirmado!</h2>
-              <p className="muted">Plano {plan.name} ativo. Redirecionando para sua conta...</p>
+              <h2 style={{ fontSize: 26, marginBottom: 8 }}>{pending ? 'Pagamento em análise' : 'Pagamento confirmado!'}</h2>
+              <p className="muted">
+                {pending
+                  ? `Seu plano ${plan.name} será ativado assim que o Mercado Pago confirmar a cobrança. Redirecionando para sua conta...`
+                  : `Plano ${plan.name} ativo. Redirecionando para sua conta...`}
+              </p>
             </div>
           </div>
         </main>

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(node -e ' *)",
+      "Bash(npx dotenv -e .env -- node -e ' *)",
+      "Bash(node -r dotenv/config -e ' *)",
+      "Bash(npx tsc *)",
+      "Bash(Test-Path *)"
+    ]
+  }
+}

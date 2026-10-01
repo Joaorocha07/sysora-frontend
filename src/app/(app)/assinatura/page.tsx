@@ -2,15 +2,15 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowRight, Building2, CreditCard, MessageCircle, Plus, Sparkles } from 'lucide-react';
+import { ArrowRight, Building2, CreditCard, Plus, Sparkles, XCircle } from 'lucide-react';
 import PlanCard from '@/components/PlanCard';
 import { ConfirmDialog, Field, FormError, Loading, Modal, PageHead, useToast } from '@/components/ui';
-import { accountApi, errorMessage, type AccountOverview, type PlanInfo, type Subscription } from '@/lib/api';
+import {
+  accountApi, errorMessage, subscriptionsApi,
+  type AccountOverview, type MpSubscriptionStatus, type PlanInfo, type Subscription,
+} from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { brDate, money } from '@/lib/format';
-
-// Link de contato para pagamento (WhatsApp, página de checkout...). Opcional.
-const SUPPORT_URL = process.env.NEXT_PUBLIC_SUPPORT_URL;
 
 function statusText(s: Subscription): string {
   const date = (value: string | null) => (value ? brDate(value.slice(0, 10)) : '');
@@ -60,14 +60,19 @@ export default function AssinaturaPage() {
   const router = useRouter();
   const toast = useToast();
   const { isAdmin, company, switchCompany, reloadSession } = useAuth();
+
   const [data, setData] = useState<AccountOverview | null>(null);
+  const [mpStatus, setMpStatus] = useState<MpSubscriptionStatus | null>(null);
   const [changing, setChanging] = useState<PlanInfo | null>(null);
   const [creating, setCreating] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     accountApi.get().then(setData).catch((err) => toast(errorMessage(err), true));
+    subscriptionsApi.status().then(setMpStatus).catch(() => null);
   }, [toast]);
+
   useEffect(load, [load]);
 
   async function changePlan() {
@@ -77,6 +82,21 @@ export default function AssinaturaPage() {
       await accountApi.changePlan(changing.id);
       toast(`Plano alterado para ${changing.name}.`);
       setChanging(null);
+      await reloadSession();
+      load();
+    } catch (err) {
+      toast(errorMessage(err), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCancelSubscription() {
+    setBusy(true);
+    try {
+      await subscriptionsApi.cancel();
+      toast('Assinatura cancelada. O acesso continua até o fim do período pago.');
+      setCancelConfirm(false);
       await reloadSession();
       load();
     } catch (err) {
@@ -99,6 +119,9 @@ export default function AssinaturaPage() {
   if (!data) return <Loading />;
   const sub = data.subscription;
 
+  const hasActivePayment = sub.status === 'ACTIVE' && mpStatus?.mpStatus === 'authorized';
+  const needsPayment = !sub.active || sub.status === 'TRIAL' || sub.status === 'PAST_DUE' || sub.status === 'CANCELED';
+
   if (!isAdmin) {
     return (
       <>
@@ -120,12 +143,31 @@ export default function AssinaturaPage() {
         <div style={{ flex: 1, minWidth: 220 }}>
           <strong style={{ display: 'block', fontSize: 18, fontFamily: 'var(--display)' }}>{money(sub.priceCents)}/mês</strong>
           <small>{statusText(sub)} · {sub.maxCompanies === 1 ? '1 empresa' : `até ${sub.maxCompanies} empresas`} · administrador + até {sub.maxEmployees} funcionários por empresa</small>
+          {mpStatus?.lastFourDigits && (
+            <small style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>
+              Cartão terminando em •••• {mpStatus.lastFourDigits}
+              {mpStatus.nextPaymentDate && ` · próxima cobrança em ${brDate(mpStatus.nextPaymentDate.slice(0, 10))}`}
+            </small>
+          )}
         </div>
-        {(sub.status !== 'ACTIVE' || !sub.active) && (
-          SUPPORT_URL
-            ? <a href={SUPPORT_URL} target="_blank" rel="noreferrer" className="btn btn-primary"><MessageCircle size={16} />{sub.status === 'TRIAL' ? 'Assinar agora' : 'Regularizar pagamento'}</a>
-            : <span className="hint" style={{ maxWidth: 320 }}>Para assinar ou regularizar, fale com o suporte do Sysora. Assim que o pagamento é confirmado, o acesso é liberado.</span>
-        )}
+
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {needsPayment && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => router.push(`/assinatura/checkout?plan=${sub.plan}`)}
+            >
+              <CreditCard size={16} />
+              {sub.status === 'TRIAL' ? 'Assinar agora' : 'Regularizar pagamento'}
+            </button>
+          )}
+          {hasActivePayment && (
+            <button type="button" className="btn btn-ghost" onClick={() => setCancelConfirm(true)}>
+              <XCircle size={15} />Cancelar assinatura
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
@@ -152,7 +194,7 @@ export default function AssinaturaPage() {
           <div className="row-wrap" style={{ padding: '16px 24px 22px', gap: 12 }}>
             <Sparkles size={16} />
             <span className="muted" style={{ flex: 1 }}>Tem outra unidade ou outro negócio? No plano Avançado você gerencia até 2 empresas, cada uma com o seu WhatsApp.</span>
-            <button type="button" className="btn btn-sm btn-outline" onClick={() => setChanging(data.plans.find((p) => p.id === 'AVANCADO')!)}>Conhecer o Avançado</button>
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => router.push('/assinatura/checkout?plan=AVANCADO')}>Assinar o Avançado</button>
           </div>
         )}
       </div>
@@ -166,11 +208,14 @@ export default function AssinaturaPage() {
             current={plan.id === sub.plan}
             action={plan.id === sub.plan
               ? <button type="button" className="btn btn-outline btn-lg btn-block" disabled>Plano atual</button>
-              : <button type="button" className="btn btn-primary btn-lg btn-block" onClick={() => setChanging(plan)}>Mudar para o {plan.name}</button>}
+              : <button type="button" className="btn btn-primary btn-lg btn-block" onClick={() => router.push(`/assinatura/checkout?plan=${plan.id}`)}>
+                  {sub.status === 'ACTIVE' ? `Mudar para o ${plan.name}` : `Assinar o ${plan.name}`}
+                </button>}
           />
         ))}
       </div>
 
+      {/* Confirmação de troca de plano sem pagamento (admin master) */}
       {changing && (
         <ConfirmDialog
           title={`Mudar para o plano ${changing.name}?`}
@@ -183,6 +228,20 @@ export default function AssinaturaPage() {
           onClose={() => setChanging(null)}
         />
       )}
+
+      {/* Confirmação de cancelamento */}
+      {cancelConfirm && (
+        <ConfirmDialog
+          title="Cancelar assinatura?"
+          message="A cobrança automática será encerrada. Você continuará com acesso ao sistema até o fim do período já pago."
+          confirmLabel="Sim, cancelar"
+          danger
+          busy={busy}
+          onConfirm={handleCancelSubscription}
+          onClose={() => setCancelConfirm(false)}
+        />
+      )}
+
       {creating && (
         <NewCompanyModal
           onClose={() => setCreating(false)}

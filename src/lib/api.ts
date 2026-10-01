@@ -80,6 +80,15 @@ export type CompanyProfile = { id: string; name: string; slug: string; document:
 
 export type WhatsAppStatus = { status: 'disconnected' | 'connecting' | 'qr' | 'connected'; qr: string | null; phone: string | null; error: string | null };
 
+// Fluxo do chatbot (aba "Fluxo do bot"): árvore de menus a partir das boas-vindas.
+export type FlowAction = 'agendar' | 'meus' | 'servicos' | 'equipe';
+export type FlowNodeType = 'menu' | 'message' | 'action' | 'end';
+export type FlowNode = {
+  id: string; label: string; type: FlowNodeType; messages: string[]; together: boolean;
+  prompt?: string; options?: FlowNode[]; action?: FlowAction; next?: 'menu' | 'parent';
+};
+export type BotFlow = { flow: FlowNode; custom: boolean };
+
 export type Dashboard = {
   clients: number; newClientsMonth: number; todayCount: number; monthAppointments: number; monthCompleted: number;
   monthRevenueCents: number; botAppointmentsMonth: number; unreadMessages: number; servicesCount: number; pendingUsers: number;
@@ -391,4 +400,7 @@ export const whatsappApi = {
   connect: () => send<WhatsAppStatus>('POST', '/whatsapp/connect'),
   disconnect: () => send<WhatsAppStatus>('POST', '/whatsapp/disconnect'),
   test: (to: string) => send<{ message: string }>('POST', '/whatsapp/test', { to }),
+  flow: () => get<BotFlow>('/whatsapp/flow'),
+  saveFlow: (flow: FlowNode) => send<BotFlow>('PUT', '/whatsapp/flow', { flow }),
+  resetFlow: () => send<BotFlow>('DELETE', '/whatsapp/flow'),
 };

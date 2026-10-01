@@ -2,7 +2,7 @@
 // backend. Ativado pelo botão "Ver demonstração" (localStorage 'sysora-demo').
 // Os dados são gerados a partir da data de hoje e somem ao recarregar a página.
 import type {
-  AdminCompany, AdminUser, Appointment, AppointmentStatus, Client, Conversation, Member, Message, Service, Session, Settings, Subscription,
+  AdminCompany, AdminUser, Appointment, AppointmentStatus, Client, Conversation, FlowNode, Member, Message, Service, Session, Settings, Subscription,
 } from './api';
 import { PLANS } from './plans';
 
@@ -162,7 +162,16 @@ function build() {
     const saved = sessionStorage.getItem(COMPANY_KEY);
     if (saved !== null) companyIdx = Number(saved);
   } catch { /* navegação privada */ }
-  return { services, clients, members, pending, appointments, messages, settings, adminCompanies, sub, whatsappSince: 0, companyIdx };
+  return { services, clients, members, pending, appointments, messages, settings, adminCompanies, sub, whatsappSince: 0, companyIdx, botFlow: null as FlowNode | null };
+}
+
+// Mesmo fluxo padrão do backend (whatsapp.flow.ts).
+function defaultDemoFlow(greeting: string): FlowNode {
+  const labels = { agendar: 'Agendar um horário', meus: 'Meus agendamentos', servicos: 'Serviços e valores', equipe: 'Falar com a equipe' } as const;
+  return {
+    id: 'inicio', label: 'Início', type: 'menu', messages: [greeting], together: false, prompt: 'Como posso te ajudar? Responda com o número:',
+    options: (Object.keys(labels) as (keyof typeof labels)[]).map((action) => ({ id: action, label: labels[action], type: 'action', action, messages: [], together: true })),
+  };
 }
 
 let db: ReturnType<typeof build> | null = null;
@@ -476,6 +485,11 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   if (path === '/whatsapp/connect') { d.whatsappSince = Date.now(); return whatsappStatus(); }
   if (path === '/whatsapp/disconnect') { d.whatsappSince = 0; d.settings.whatsappConnected = false; d.settings.whatsappPhone = null; return whatsappStatus(); }
   if (path === '/whatsapp/test') return { message: 'Mensagem de teste enviada (demonstração).' };
+  if (path === '/whatsapp/flow') {
+    if (method === 'PUT') d.botFlow = (body as { flow: FlowNode }).flow;
+    if (method === 'DELETE') d.botFlow = null;
+    return { flow: d.botFlow ?? defaultDemoFlow(d.settings.greetingMessage), custom: Boolean(d.botFlow) };
+  }
 
   return fail('Recurso indisponível no modo demonstração.', 404);
 }

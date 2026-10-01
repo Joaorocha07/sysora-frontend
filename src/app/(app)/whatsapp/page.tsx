@@ -2,18 +2,20 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Bot, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Save, Send, Smartphone } from 'lucide-react';
+import { Bell, Bot, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Save, Send, Smartphone, Workflow } from 'lucide-react';
 import { useShell } from '@/components/AppShell';
+import { BotFlowEditor } from '@/components/BotFlowEditor';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
 import { errorMessage, settingsApi, whatsappApi, type Settings, type WhatsAppStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { duration } from '@/lib/format';
 
-type Tab = 'conexao' | 'bot' | 'lembretes' | 'equipe';
+type Tab = 'conexao' | 'bot' | 'fluxo' | 'lembretes' | 'equipe';
 
 const TABS: { id: Tab; label: string; icon: typeof Bot }[] = [
   { id: 'conexao', label: 'Conexão', icon: QrCode },
   { id: 'bot', label: 'Mensagens do bot', icon: Bot },
+  { id: 'fluxo', label: 'Fluxo do bot', icon: Workflow },
   { id: 'lembretes', label: 'Lembretes', icon: Bell },
   { id: 'equipe', label: 'Atendimento humano', icon: Headset },
 ];
@@ -152,7 +154,7 @@ function Connection() {
   );
 }
 
-function BotSettings({ tab }: { tab: Exclude<Tab, 'conexao'> }) {
+function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo'>; onOpenFlow: () => void }) {
   const toast = useToast();
   const [saved, setSaved] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
@@ -192,11 +194,11 @@ function BotSettings({ tab }: { tab: Exclude<Tab, 'conexao'> }) {
             <Switch checked={draft.autoCreateClient} onChange={(v) => set('autoCreateClient', v)} label="Cadastrar clientes automaticamente" description="Quem manda mensagem vira cliente. Desligado, o cliente só é cadastrado quando conclui um agendamento." />
             <Switch checked={draft.askName} onChange={(v) => set('askName', v)} label="Perguntar o nome" description="Quando o perfil do WhatsApp não traz um nome, o bot pergunta antes de agendar." />
             <div className="divider" />
-            <Field label="Boas-vindas" hint={`Primeira mensagem de cada conversa, antes do menu. Use ${VARS}.`}><textarea className="textarea" {...text('greetingMessage')} /></Field>
             <Field label="Confirmação do agendamento" hint={`Enviada quando o cliente conclui o agendamento. Use ${VARS}.`}><textarea className="textarea" {...text('confirmationMessage')} /></Field>
             <div className="phone-preview">
-              <small className="eyebrow">Menu que o bot envia</small>
-              <div className="bubble bot" style={{ alignSelf: 'flex-start' }}>{'Como posso te ajudar? Responda com o número:\n\n1) Agendar um horário\n2) Meus agendamentos\n3) Serviços e valores\n4) Falar com a equipe'}</div>
+              <small className="eyebrow">Boas-vindas e menu</small>
+              <p className="muted">As mensagens de boas-vindas, o menu e as opções do bot são montados na aba <strong>Fluxo do bot</strong>.</p>
+              <button type="button" className="btn btn-outline btn-sm" style={{ justifySelf: 'start' }} onClick={onOpenFlow}><Workflow size={14} />Abrir o fluxo do bot</button>
             </div>
           </>
         )}
@@ -263,7 +265,7 @@ export default function WhatsAppPage() {
           <button key={id} type="button" className={tab === id ? 'on' : ''} onClick={() => setTab(id)}><Icon size={15} style={{ verticalAlign: -3, marginRight: 6 }} />{label}</button>
         ))}
       </div>
-      {tab === 'conexao' ? <Connection /> : <BotSettings key={tab} tab={tab} />}
+      {tab === 'conexao' ? <Connection /> : tab === 'fluxo' ? <BotFlowEditor /> : <BotSettings key={tab} tab={tab} onOpenFlow={() => setTab('fluxo')} />}
       {tab !== 'conexao' && (
         <p className="hint" style={{ marginTop: 14 }}><MessageSquareText size={13} style={{ verticalAlign: -2 }} /> Os horários de atendimento que o bot oferece ficam em Configurações → Horários.</p>
       )}

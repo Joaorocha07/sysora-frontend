@@ -17,7 +17,9 @@ import { demoMode } from '@/lib/demo';
 import { ROLE_LABELS, firstName } from '@/lib/format';
 
 // Dias até o fim do teste grátis (arredondado para cima).
-const daysUntil = (date: string | null) => (date ? Math.max(0, Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000)) : 0);
+// Dias inteiros que faltam (6,1 dias → 6); no último dia mostra "termina hoje".
+const daysUntil = (date: string | null) => (date ? Math.max(0, Math.floor((new Date(date).getTime() - Date.now()) / 86_400_000)) : 0);
+const shortDate = (date: string | null) => (date ? new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '');
 
 function SubscriptionBar({ subscription, isAdmin }: { subscription: Subscription; isAdmin: boolean }) {
   if (!subscription.active) {
@@ -34,7 +36,7 @@ function SubscriptionBar({ subscription, isAdmin }: { subscription: Subscription
     return (
       <div className="sub-bar">
         <Sparkles size={16} />
-        <span>Teste grátis do plano <strong>{subscription.planName}</strong>: {days === 0 ? 'termina hoje' : `${days} ${days === 1 ? 'dia restante' : 'dias restantes'}`}.</span>
+        <span>Teste grátis do plano <strong>{subscription.planName}</strong>: {days === 0 ? 'termina hoje' : `${days} ${days === 1 ? 'dia restante' : 'dias restantes'}`} (até {shortDate(subscription.trialEndsAt)}).</span>
         {isAdmin && <Link href="/assinatura">Assinar agora</Link>}
       </div>
     );

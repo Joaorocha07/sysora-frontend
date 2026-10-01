@@ -11,7 +11,9 @@ import Logo from './Logo';
 import LogoutDialog from './LogoutDialog';
 import ThemeToggle from './ThemeToggle';
 import { Avatar, Loading, useToast } from './ui';
-import { authApi, conversationsApi, errorMessage, subscribeSubscriptionBlocked, usersApi, whatsappApi, type CompanyChoice, type Subscription } from '@/lib/api';
+import {
+  authApi, conversationsApi, errorMessage, subscribeNotice, subscribeSubscriptionBlocked, usersApi, whatsappApi, type CompanyChoice, type Subscription,
+} from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { demoMode } from '@/lib/demo';
 import { ROLE_LABELS, firstName } from '@/lib/format';
@@ -26,7 +28,7 @@ function SubscriptionBar({ subscription, isAdmin }: { subscription: Subscription
     return (
       <div className="sub-bar alert">
         <AlertTriangle size={16} />
-        <span>{subscription.status === 'TRIAL' ? 'Seu teste grátis terminou.' : 'Sua assinatura está vencida.'} {isAdmin ? 'Escolha um plano para continuar usando o Sysora e o bot.' : 'Avise o administrador da empresa.'}</span>
+        <span>{subscription.status === 'TRIAL' ? 'Seu teste grátis terminou.' : 'Sua assinatura está vencida.'} Você pode consultar seus dados, mas cadastrar, editar e o bot do WhatsApp estão pausados. {isAdmin ? 'Assine um plano para liberar tudo.' : 'Avise o administrador da empresa.'}</span>
         {isAdmin && <Link href="/assinatura">Ver planos</Link>}
       </div>
     );
@@ -93,8 +95,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const current = ALL_NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
   const forbidden = Boolean(current?.adminOnly && !isAdmin);
-  // Assinatura vencida: só a tela de assinatura (o admin master sempre passa, para dar suporte).
-  const blocked = Boolean(subscription && !subscription.active && !user?.isSuperAdmin && pathname !== '/assinatura');
 
   useEffect(() => { setDemo(Boolean(demoMode())); }, [status]);
 
@@ -103,21 +103,31 @@ export default function AppShell({ children }: { children: ReactNode }) {
     if (status === 'unauthenticated') router.replace('/login');
     else if (status === 'authenticated' && !company) router.replace(user?.isSuperAdmin ? '/master' : '/login');
     else if (status === 'authenticated' && forbidden) router.replace('/painel');
-    else if (status === 'authenticated' && blocked) router.replace('/assinatura');
-  }, [status, company, user, forbidden, blocked, router]);
+  }, [status, company, user, forbidden, router]);
 
-  // A API recusou por assinatura vencida (ex.: venceu com o sistema aberto).
+  // A API recusou uma alteração por assinatura vencida (ex.: venceu com o sistema
+  // aberto): recarrega a sessão para a barra de aviso aparecer. A própria tela
+  // mostra a mensagem de erro do backend.
   useEffect(() => {
-    subscribeSubscriptionBlocked(() => { void reloadSession().then(() => router.replace('/assinatura')); });
+    subscribeSubscriptionBlocked(() => { void reloadSession(); });
     return () => subscribeSubscriptionBlocked(null);
-  }, [reloadSession, router]);
+  }, [reloadSession]);
+
+  // O plano da empresa atual venceu e o backend levou o funcionário para outra
+  // empresa com o plano em dia: avisa e volta ao painel da empresa nova.
+  useEffect(() => {
+    subscribeNotice((message) => {
+      toast(message, true);
+      router.replace('/painel');
+    });
+    return () => subscribeNotice(null);
+  }, [toast, router]);
 
   const refreshBadges = useCallback(() => {
-    if (blocked) return;
     conversationsApi.list().then((list) => setUnread(list.reduce((sum, c) => sum + c.unreadCount, 0))).catch(() => {});
     whatsappApi.status().then((s) => setWhatsappConnected(s.status === 'connected')).catch(() => {});
     if (isAdmin) usersApi.pending().then((list) => setPendingUsers(list.length)).catch(() => {});
-  }, [blocked, isAdmin]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (status !== 'authenticated' || !company) return;
@@ -145,7 +155,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     setConfirmingLogout(true);
   }
 
-  if (status !== 'authenticated' || !company || !user || forbidden || blocked) return <Loading />;
+  if (status !== 'authenticated' || !company || !user || forbidden) return <Loading />;
 
   const canSwitch = user.isSuperAdmin || companies.length > 1;
   const navLink = ({ href, label, icon: Icon }: NavItem) => {
@@ -219,8 +229,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   <div className="menu">
                     <div className="menu-label">Trocar de empresa</div>
                     {companies.map((c) => (
-                      <button key={c.id} type="button" onClick={() => goToCompany(c.id)} disabled={c.id === company.id}>
-                        <Building2 size={16} />{c.name}{c.id === company.id && <small style={{ marginLeft: 'auto' }}>atual</small>}
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => goToCompany(c.id)}
+                        disabled={c.id === company.id || c.available === false}
+                        title={c.available === false ? 'O plano desta empresa está vencido. Peça ao administrador dela para renovar.' : undefined}
+                      >
+                        <Building2 size={16} />{c.name}
+                        {c.id === company.id
+                          ? <small style={{ marginLeft: 'auto' }}>atual</small>
+                          : c.available === false && <small style={{ marginLeft: 'auto' }}>plano vencido</small>}
                       </button>
                     ))}
                     {user.isSuperAdmin && (

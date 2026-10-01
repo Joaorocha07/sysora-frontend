@@ -127,6 +127,8 @@ function CompanyForm({ initialPlan, google, onDropGoogle }: { initialPlan: PlanI
 function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: string } & GoogleProps) {
   const [form, setForm] = useState({ inviteCode: initialCode, name: google?.name ?? '', email: '', phone: '', password: '', confirm: '' });
   const [company, setCompany] = useState<string | null>(null);
+  // Plano da empresa vencido: o cadastro vale, mas o acesso só libera após a renovação.
+  const [planExpired, setPlanExpired] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,8 +138,13 @@ function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: stri
   useEffect(() => {
     const code = form.inviteCode.replace(/[^A-Z0-9]/g, '');
     setCompany(null);
+    setPlanExpired(false);
     if (code.length < 6) return;
-    const timer = setTimeout(() => { authApi.lookupInvite(code).then((r) => setCompany(r.name)).catch(() => setCompany('')); }, 350);
+    const timer = setTimeout(() => {
+      authApi.lookupInvite(code)
+        .then((r) => { setCompany(r.name); setPlanExpired(!r.subscriptionActive); })
+        .catch(() => setCompany(''));
+    }, 350);
     return () => clearTimeout(timer);
   }, [form.inviteCode]);
 
@@ -173,7 +180,7 @@ function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: stri
   return (
     <form className="stack" onSubmit={submit}>
       <FormError message={error} />
-      <Field label="Código da empresa" hint={company ? <>Empresa: <strong style={{ color: 'var(--ink)' }}>{company}</strong></> : company === '' ? 'Código não encontrado. Confira com o administrador.' : 'Peça o código ao administrador da empresa (fica na tela Equipe).'}>
+      <Field label="Código da empresa" hint={company ? <>Empresa: <strong style={{ color: 'var(--ink)' }}>{company}</strong>{planExpired && '. O plano desta empresa está vencido: você pode se cadastrar, mas só vai conseguir entrar depois que o administrador renovar a assinatura.'}</> : company === '' ? 'Código não encontrado. Confira com o administrador.' : 'Peça o código ao administrador da empresa (fica na tela Equipe).'}>
         <div className="input-icon"><KeyRound size={17} /><input className="input" required value={form.inviteCode} onChange={(e) => set('inviteCode')(e.target.value)} placeholder="Ex.: K7M2Q9XA" style={{ letterSpacing: '.12em', fontWeight: 600 }} /></div>
       </Field>
       <div className="grid-2">

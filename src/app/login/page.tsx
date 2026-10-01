@@ -8,7 +8,7 @@ import AuthLayout from '@/components/AuthLayout';
 import GoogleButton from '@/components/GoogleButton';
 import Logo from '@/components/Logo';
 import { Avatar, Field, FormError } from '@/components/ui';
-import { errorMessage } from '@/lib/api';
+import { errorMessage, takeLoginNotice } from '@/lib/api';
 import { homeFor, useAuth } from '@/lib/auth';
 import { ROLE_LABELS } from '@/lib/format';
 
@@ -26,6 +26,13 @@ export default function LoginPage() {
   useEffect(() => {
     if (status === 'authenticated' && user && !choosing) router.replace(homeFor({ user, company }));
   }, [status, user, company, choosing, router]);
+
+  // Sessão encerrada pelo backend (ex.: plano da empresa vencido): mostra o motivo.
+  useEffect(() => {
+    if (status !== 'unauthenticated') return;
+    const notice = takeLoginNotice();
+    if (notice) setError(notice);
+  }, [status]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -66,9 +73,22 @@ export default function LoginPage() {
           <FormError message={error} />
           <div className="stack-sm">
             {pendingCompanies.map((c) => (
-              <button key={c.id} type="button" className="company-choice" onClick={() => pick(c.id)} disabled={busy}>
+              <button
+                key={c.id}
+                type="button"
+                className="company-choice"
+                onClick={() => pick(c.id)}
+                disabled={busy || c.available === false}
+                style={c.available === false ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
+              >
                 <Avatar name={c.name} />
-                <div><strong style={{ display: 'block' }}>{c.name}</strong><small>{ROLE_LABELS[c.role]}</small></div>
+                <div>
+                  <strong style={{ display: 'block' }}>{c.name}</strong>
+                  <small>
+                    {ROLE_LABELS[c.role]}
+                    {c.available === false && ' · Plano vencido: peça ao administrador para renovar'}
+                  </small>
+                </div>
                 <ChevronRight size={18} />
               </button>
             ))}

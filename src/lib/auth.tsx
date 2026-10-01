@@ -23,7 +23,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<Session | 'select-company'>;
   // Login com o access token do Supabase (volta do Google). E-mail sem conta
   // devolve os dados para concluir o cadastro.
-  loginWithGoogle: (accessToken: string) => Promise<Session | 'select-company' | GoogleSignup>;
+  loginWithGoogle: (accessToken: string, intent?: 'login' | 'join') => Promise<Session | 'select-company' | GoogleSignup>;
   chooseCompany: (companyId: string) => Promise<Session>;
   switchCompany: (companyId: string | null) => Promise<Session>;
   // Cadastro de uma empresa nova: já entra como administrador.
@@ -67,8 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => startSession(await authApi.login(email, password)), [startSession]);
 
-  const loginWithGoogle = useCallback(async (accessToken: string) => {
-    const result = await authApi.google(accessToken);
+  const loginWithGoogle = useCallback(async (accessToken: string, intent?: 'login' | 'join') => {
+    const result = await authApi.google(accessToken, intent);
     if ('status' in result && result.status === 'signup-required') {
       setPending(null);
       return { signupToken: result.signupToken, email: result.email, name: result.name, avatarUrl: result.avatarUrl };

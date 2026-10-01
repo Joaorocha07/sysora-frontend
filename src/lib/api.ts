@@ -11,7 +11,14 @@ export type MessageSender = 'CLIENT' | 'BOT' | 'STAFF';
 // avatarUrl: foto do Google (nula para quem só entra com e-mail e senha).
 export type AuthUser = { id: string; name: string; email: string; isSuperAdmin: boolean; avatarUrl: string | null };
 export type AuthCompany = { id: string; name: string; slug: string };
-export type CompanyChoice = AuthCompany & { role: Role };
+// available = false: funcionário de empresa com o plano vencido (não pode entrar nela).
+export type CompanyChoice = AuthCompany & { role: Role; available?: boolean };
+export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'REJECTED';
+// Equipe do usuário no perfil (pedidos aprovados, pendentes e recusados).
+export type MyMembership = {
+  membershipId: string; company: { id: string; name: string; active: boolean }; role: Role; status: MembershipStatus;
+  active: boolean; planActive: boolean; requestedAt: string; decidedAt: string | null;
+};
 export type PlanId = 'INICIAL' | 'AVANCADO';
 export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
 export type Subscription = {
@@ -19,7 +26,11 @@ export type Subscription = {
   trialEndsAt: string | null; paidUntil: string | null; active: boolean; maxCompanies: number; maxEmployees: number;
 };
 export type PlanInfo = { id: PlanId; name: string; priceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
-export type Session = { accessToken: string; user: AuthUser; company: AuthCompany | null; role: Role | null; subscription: Subscription | null };
+export type Session = {
+  accessToken: string; user: AuthUser; company: AuthCompany | null; role: Role | null; subscription: Subscription | null;
+  // Aviso do backend (ex.: levado para outra empresa porque o plano da atual venceu).
+  notice?: string;
+};
 export type LoginResponse = Session | { status: 'select-company'; preAuthToken: string; companies: CompanyChoice[] };
 // Login com Google de um e-mail sem conta: o token conclui o cadastro sem senha.
 export type GoogleLoginResponse = LoginResponse | { status: 'signup-required'; signupToken: string; email: string; name: string; avatarUrl: string | null };
@@ -129,10 +140,40 @@ async function parseError(res: Response): Promise<ApiError> {
 // Várias requisições com token vencido ao mesmo tempo compartilham um único refresh.
 let refreshPromise: Promise<Session | null> | null = null;
 let onSessionChange: ((session: Session | null) => void) | null = null;
-// Assinatura vencida (HTTP 402): o app leva o usuário para a tela de assinatura.
+// Assinatura vencida (HTTP 402): o app recarrega a sessão para mostrar o aviso.
 let onSubscriptionBlocked: (() => void) | null = null;
 export const subscribeSubscriptionBlocked = (fn: typeof onSubscriptionBlocked) => { onSubscriptionBlocked = fn; };
 export const subscribeSession = (fn: typeof onSessionChange) => { onSessionChange = fn; };
+
+// Aviso para a tela de login quando a sessão é encerrada pelo backend (ex.:
+// funcionário de empresa com o plano vencido). Fica no sessionStorage para
+// sobreviver ao redirecionamento.
+const LOGIN_NOTICE_KEY = 'sysora:login-notice';
+export function takeLoginNotice(): string | null {
+  try {
+    const notice = sessionStorage.getItem(LOGIN_NOTICE_KEY);
+    sessionStorage.removeItem(LOGIN_NOTICE_KEY);
+    return notice;
+  } catch {
+    return null;
+  }
+}
+function saveLoginNotice(message: string) {
+  try { sessionStorage.setItem(LOGIN_NOTICE_KEY, message); } catch { /* sem storage: só não mostra o aviso */ }
+}
+
+// Aviso dentro do app (ex.: levado para outra empresa). Se ninguém estiver
+// ouvindo ainda (app carregando), fica guardado até o AppShell assinar.
+let onNotice: ((message: string) => void) | null = null;
+let pendingNotice: string | null = null;
+export const subscribeNotice = (fn: typeof onNotice) => {
+  onNotice = fn;
+  if (fn && pendingNotice) { fn(pendingNotice); pendingNotice = null; }
+};
+function emitNotice(message: string) {
+  if (onNotice) onNotice(message);
+  else pendingNotice = message;
+}
 
 function silentRefresh(): Promise<Session | null> {
   refreshPromise ??= authApi.refresh()
@@ -163,9 +204,29 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     if (await silentRefresh()) return request<T>(path, init, false);
   }
   if (res.status === 402) onSubscriptionBlocked?.();
-  if (!res.ok) throw await parseError(res);
+  if (!res.ok) {
+    const error = await parseError(res);
+    // Funcionário de empresa com o plano vencido:
+    // - no login e na troca de empresa, o erro só aparece na tela;
+    // - no refresh, não há outra empresa disponível: encerra a sessão e leva o aviso para o login;
+    // - numa tela qualquer (venceu com o sistema aberto), renova a sessão: o backend
+    //   leva para outra empresa com o plano em dia, se houver (ver refreshSession).
+    if (error.code === 'COMPANY_SUBSCRIPTION_INACTIVE') {
+      if (path === '/auth/refresh') {
+        saveLoginNotice(error.message);
+        setAccessToken(null);
+        onSessionChange?.(null);
+      } else if (!path.startsWith('/auth/')) {
+        void silentRefresh();
+      }
+    }
+    throw error;
+  }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const data = (await res.json()) as T;
+  const notice = (data as { notice?: unknown } | null)?.notice;
+  if (path === '/auth/refresh' && typeof notice === 'string') emitNotice(notice);
+  return data;
 }
 
 const get = <T>(path: string) => request<T>(path);
@@ -190,19 +251,21 @@ export const authApi = {
   signupConfig: () => get<{ companySignup: boolean }>('/auth/signup-config'),
   register: async (input: RegisterCompanyInput) => keep(await send<Session>('POST', '/auth/register', input)),
   registerEmployee: (input: RegisterEmployeeInput) => send<{ message: string }>('POST', '/auth/register-employee', input),
-  lookupInvite: (code: string) => get<{ name: string }>(`/auth/invite/${encodeURIComponent(code)}`),
+  lookupInvite: (code: string) => get<{ name: string; subscriptionActive: boolean }>(`/auth/invite/${encodeURIComponent(code)}`),
   async login(email: string, password: string): Promise<LoginResponse> {
     const result = await send<LoginResponse>('POST', '/auth/login', { email, password });
     return 'accessToken' in result ? keep(result) : result;
   },
-  async google(accessToken: string): Promise<GoogleLoginResponse> {
-    const result = await send<GoogleLoginResponse>('POST', '/auth/google', { accessToken });
+  // intent 'join': veio do cadastro de funcionário (convite); conta existente também conclui o pedido.
+  async google(accessToken: string, intent?: 'login' | 'join'): Promise<GoogleLoginResponse> {
+    const result = await send<GoogleLoginResponse>('POST', '/auth/google', { accessToken, intent });
     return 'accessToken' in result ? keep(result) : result;
   },
   loginCompany: async (preAuthToken: string, companyId: string) => keep(await send<Session>('POST', '/auth/login/company', { preAuthToken, companyId })),
   refresh: async () => keep(await send<Session>('POST', '/auth/refresh')),
   switchCompany: async (companyId: string | null) => keep(await send<Session>('POST', '/auth/switch-company', { companyId })),
   companies: () => get<{ companies: CompanyChoice[] }>('/auth/companies').then((r) => r.companies),
+  memberships: () => get<{ memberships: MyMembership[] }>('/auth/memberships').then((r) => r.memberships),
   logout: async () => { try { await send('POST', '/auth/logout'); } finally { setAccessToken(null); } },
   forgotPassword: (email: string) => send<{ message: string }>('POST', '/auth/forgot-password', { email }),
   resetPassword: (token: string, password: string) => send<{ message: string }>('POST', '/auth/reset-password', { token, password }),

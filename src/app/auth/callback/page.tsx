@@ -38,7 +38,9 @@ function GoogleCallback() {
         const { data, error: exchangeError } = await client.auth.exchangeCodeForSession(code);
         if (exchangeError || !data.session) throw new Error('Não foi possível confirmar o login com o Google. Tente novamente.');
         stopDemo();
-        const result = await loginWithGoogle(data.session.access_token);
+        // Veio do cadastro "Sou da equipe": quem já tem conta também pede acesso à empresa do convite.
+        const joining = next.startsWith('/cadastro') && new URLSearchParams(next.split('?')[1] ?? '').get('tipo') === 'equipe';
+        const result = await loginWithGoogle(data.session.access_token, joining ? 'join' : 'login');
         if (result === 'select-company') {
           router.replace('/login');
         } else if ('signupToken' in result) {

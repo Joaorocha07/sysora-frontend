@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Building2, ChevronDown, LogOut, Menu, Settings, ShieldCheck, Users, X } from 'lucide-react';
+import { Building2, ChevronDown, LogOut, Menu, Settings, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
 import Logo from '@/components/Logo';
 import LogoutDialog from '@/components/LogoutDialog';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -14,6 +14,7 @@ import { firstName } from '@/lib/format';
 const MASTER_NAV = [
   { href: '/master', label: 'Empresas e assinaturas', icon: Building2 },
   { href: '/master/usuarios', label: 'Usuários', icon: Users },
+  { href: '/master/ia', label: 'IA (Sora)', icon: Sparkles },
   { href: '/master/configuracoes', label: 'Configurações', icon: Settings },
 ];
 

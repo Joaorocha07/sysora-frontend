@@ -1,17 +1,26 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import Link from 'next/link';
 import {
-  ArrowDown, ArrowUp, CornerDownLeft, Flag, ListTree, MessageSquare, Play, Plus, RotateCcw, Save, Trash2, TriangleAlert, Zap,
+  ArrowDown, ArrowUp, CalendarDays, Clock, CornerDownLeft, Flag, Hand, ListTree, MessageSquare, PenLine, Play, Plus, RotateCcw, Save, Send,
+  Sparkles, Tag, Trash2, TriangleAlert, Undo2, Zap,
 } from 'lucide-react';
 import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui';
-import { errorMessage, whatsappApi, type FlowAction, type FlowNode, type FlowNodeType } from '@/lib/api';
+import {
+  errorMessage, servicesApi, settingsApi, whatsappApi,
+  type FlowAction, type FlowNode, type FlowNodeType, type Service, type Settings, type SoraMessage, type SoraUsage,
+} from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { money } from '@/lib/format';
 
 // Editor visual do fluxo do bot: a árvore de menus vira um fluxograma da
 // esquerda para a direita. Clicar numa etapa abre o editor; o simulador ao
 // lado mostra a conversa como o cliente vai receber. Regras iguais às do
 // backend (sysora-backend/src/modules/whatsapp/whatsapp.flow.ts).
+// As funções do sistema puxam uma seta para um resumo dos dados reais que
+// usam (serviços, horários). O fluxo pode ser montado à mão ou conversando
+// com a Sora (IA), que devolve um rascunho para revisar antes de salvar.
 
 const MAX_OPTIONS = 9;
 const MAX_MESSAGES = 5;
@@ -33,6 +42,18 @@ const ACTIONS: Record<FlowAction, { label: string; flow: string; sample: string 
 };
 
 const newId = () => Math.random().toString(36).slice(2, 10);
+
+// Dados reais mostrados ao lado das funções do sistema.
+type FlowData = { services: Service[]; settings: Settings | null };
+const SHORT_DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+// [1,2,3,4,5,6] -> "Seg a Sáb"; dias soltos -> "Seg, Qua, Sex".
+function daysLabel(days: number[]): string {
+  const sorted = [...days].sort((a, b) => a - b);
+  if (!sorted.length) return 'Nenhum dia';
+  const consecutive = sorted.every((d, i) => i === 0 || d === sorted[i - 1] + 1);
+  return consecutive && sorted.length > 2 ? `${SHORT_DAYS[sorted[0]]} a ${SHORT_DAYS[sorted[sorted.length - 1]]}` : sorted.map((d) => SHORT_DAYS[d]).join(', ');
+}
 
 function mapTree(root: FlowNode, id: string, fn: (node: FlowNode) => FlowNode): FlowNode {
   if (root.id === id) return fn(root);
@@ -113,9 +134,16 @@ export function BotFlowEditor() {
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [mode, setMode] = useState<'manual' | 'sora'>('manual');
+  const [data, setData] = useState<FlowData>({ services: [], settings: null });
+  // Fluxo antes da última mudança da Sora, para desfazer.
+  const [beforeSora, setBeforeSora] = useState<FlowNode | null>(null);
 
   useEffect(() => {
     whatsappApi.flow().then((r) => { setSaved(r.flow); setFlow(r.flow); setCustom(r.custom); }).catch((err) => toast(errorMessage(err), true));
+    Promise.all([servicesApi.list(), settingsApi.get()])
+      .then(([services, r]) => setData({ services: services.filter((s) => s.active), settings: r.settings }))
+      .catch(() => {});
   }, [toast]);
 
   const vars = useMemo<Vars>(() => ({ nome: 'Maria', empresa: company?.name ?? 'Sua empresa' }), [company?.name]);
@@ -170,6 +198,10 @@ export function BotFlowEditor() {
           <div>
             <h3>Como o bot conversa</h3>
             <p className="muted" style={{ marginTop: 4 }}>Clique numa etapa para editar. Cada opção de um menu vira um número que o cliente responde. Use {'{nome}'} e {'{empresa}'} nos textos.</p>
+            <div className="segmented" style={{ marginTop: 12, width: 'fit-content' }}>
+              <button type="button" className={mode === 'manual' ? 'on' : ''} onClick={() => setMode('manual')}><PenLine size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Montar manual</button>
+              <button type="button" className={mode === 'sora' ? 'on' : ''} onClick={() => setMode('sora')}><Sparkles size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Criar com a Sora</button>
+            </div>
           </div>
           <div className="row-wrap">
             {custom && <button type="button" className="btn btn-ghost" onClick={() => setConfirmReset(true)} disabled={busy}><RotateCcw size={15} />Restaurar padrão</button>}
@@ -186,9 +218,19 @@ export function BotFlowEditor() {
         </div>
       </div>
 
+      {mode === 'sora' && (
+        <SoraPanel
+          flow={flow}
+          problems={problems}
+          canUndo={Boolean(beforeSora)}
+          onDraft={(next) => { setBeforeSora(flow); setFlow(next); setEditing(null); }}
+          onUndo={() => { if (beforeSora) { setFlow(beforeSora); setBeforeSora(null); } }}
+        />
+      )}
+
       <div className="flow-layout">
         <div className="card flow-canvas">
-          <FlowBranch node={flow} index={null} isRoot depth={0} onEdit={setEditing} onAdd={addOption} />
+          <FlowBranch node={flow} index={null} isRoot depth={0} data={data} onEdit={setEditing} onAdd={addOption} />
         </div>
         <Simulator key={JSON.stringify(flow)} root={flow} vars={vars} />
       </div>
@@ -238,18 +280,23 @@ export function BotFlowEditor() {
   );
 }
 
-function FlowBranch({ node, index, isRoot, depth, onEdit, onAdd }: {
-  node: FlowNode; index: number | null; isRoot?: boolean; depth: number; onEdit: (id: string) => void; onAdd: (menuId: string) => void;
+function FlowBranch({ node, index, isRoot, depth, data, onEdit, onAdd }: {
+  node: FlowNode; index: number | null; isRoot?: boolean; depth: number; data: FlowData; onEdit: (id: string) => void; onAdd: (menuId: string) => void;
 }) {
   const isMenu = node.type === 'menu';
   return (
     <div className="flow-branch">
       <FlowCard node={node} index={index} isRoot={isRoot} onEdit={onEdit} />
+      {node.type === 'action' && (
+        <div className="flow-data-link t-action">
+          <ActionData action={node.action ?? 'agendar'} data={data} />
+        </div>
+      )}
       {isMenu && (
         <div className="flow-children">
           {(node.options ?? []).map((child, i) => (
             <div key={child.id} className="flow-child">
-              <FlowBranch node={child} index={i + 1} depth={depth + 1} onEdit={onEdit} onAdd={onAdd} />
+              <FlowBranch node={child} index={i + 1} depth={depth + 1} data={data} onEdit={onEdit} onAdd={onAdd} />
             </div>
           ))}
           {(node.options?.length ?? 0) < MAX_OPTIONS && (
@@ -288,6 +335,176 @@ function FlowCard({ node, index, isRoot, onEdit }: { node: FlowNode; index: numb
       {problems.length > 0 && <span className="flow-warn"><TriangleAlert size={12} />{problems[0]}</span>}
       {footer && <span className="flow-foot">{footer}</span>}
     </button>
+  );
+}
+
+// Resumo curto dos dados reais que a função usa, ao lado da caixa (pela seta).
+function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
+  const { services, settings } = data;
+  const firstServices = services.slice(0, 3);
+  const more = services.length - firstServices.length;
+  const hours = settings && (
+    <li><span>{daysLabel(settings.workDays)}</span><span>{settings.openingTime}–{settings.closingTime}</span></li>
+  );
+  const noServices = <span>Nenhum serviço ativo. <Link href="/servicos">Cadastrar serviços</Link></span>;
+
+  if (action === 'agendar') {
+    return (
+      <div className="flow-data">
+        <strong><CalendarDays size={13} />Serviço → dia → horário</strong>
+        {services.length ? (
+          <ul>
+            {firstServices.map((s) => <li key={s.id}><span>{s.name}</span><span>{s.durationMinutes} min</span></li>)}
+            {more > 0 && <li><span>+{more} serviço{more > 1 ? 's' : ''}</span><span /></li>}
+          </ul>
+        ) : noServices}
+        {settings && (
+          <>
+            <strong><Clock size={13} />Horários livres</strong>
+            <ul>
+              {hours}
+              {settings.lunchEnabled && <li><span>Almoço</span><span>{settings.lunchStart}–{settings.lunchEnd}</span></li>}
+            </ul>
+          </>
+        )}
+        <span><Link href="/servicos">Serviços</Link> · <Link href="/configuracoes?aba=horarios">Horários</Link></span>
+      </div>
+    );
+  }
+  if (action === 'servicos') {
+    return (
+      <div className="flow-data">
+        <strong><Tag size={13} />Lista enviada ao cliente</strong>
+        {services.length ? (
+          <ul>
+            {firstServices.map((s) => <li key={s.id}><span>{s.name}</span><span>{money(s.priceCents)}</span></li>)}
+            {more > 0 && <li><span>+{more} serviço{more > 1 ? 's' : ''}</span><span /></li>}
+          </ul>
+        ) : noServices}
+        <Link href="/servicos">Editar serviços e preços</Link>
+      </div>
+    );
+  }
+  if (action === 'meus') {
+    return (
+      <div className="flow-data">
+        <strong><CalendarDays size={13} />Próximo horário do cliente</strong>
+        <ul><li><span>1) Confirmar presença</span><span /></li><li><span>2) Remarcar</span><span /></li><li><span>3) Cancelar</span><span /></li></ul>
+      </div>
+    );
+  }
+  return (
+    <div className="flow-data">
+      <strong><Hand size={13} />Bot pausa, equipe assume</strong>
+      {settings?.handoffMessage && <span className="flow-msg">{settings.handoffMessage}</span>}
+      <span>Configure em Atendimento humano.</span>
+    </div>
+  );
+}
+
+const SORA_IDEAS = [
+  'Monte um fluxo completo para o meu negócio, com agendar, preços, endereço e falar com a equipe',
+  'Deixe as mensagens mais simpáticas e com emojis',
+  'Adicione uma opção com as formas de pagamento',
+];
+
+type SoraChatMessage = SoraMessage & { changed?: boolean; error?: boolean };
+
+// Chat com a Sora: cada pedido manda a conversa e o fluxo atual; a resposta
+// pode trazer um fluxo novo, que entra no fluxograma como rascunho.
+function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
+  flow: FlowNode; problems: { label: string; problem: string }[]; canUndo: boolean;
+  onDraft: (flow: FlowNode) => void; onUndo: () => void;
+}) {
+  const [usage, setUsage] = useState<SoraUsage | null>(null);
+  const [chat, setChat] = useState<SoraChatMessage[]>([]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { whatsappApi.soraUsage().then(setUsage).catch(() => setUsage({ used: 0, limit: 0, enabled: false })); }, []);
+  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight }); }, [chat, busy]);
+
+  const disabled = !usage?.enabled;
+  const limitReached = Boolean(usage && usage.used >= usage.limit);
+
+  async function ask(message: string) {
+    const content = message.trim();
+    if (!content || busy) return;
+    if (problems.length) {
+      setChat((c) => [...c, { role: 'assistant', text: `Antes, resolva o aviso em "${problems[0].label}": ${problems[0].problem}`, error: true }]);
+      return;
+    }
+    // Só a conversa de verdade vai para a Sora (sem os avisos locais de erro).
+    const history = [...chat.filter((m) => !m.error), { role: 'user' as const, text: content }];
+    setChat((c) => [...c, { role: 'user', text: content }]);
+    setText('');
+    setBusy(true);
+    try {
+      const r = await whatsappApi.askSora(history.map(({ role, text: t }) => ({ role, text: t })), clean(flow));
+      setChat((c) => [...c, { role: 'assistant', text: r.reply, changed: Boolean(r.flow) }]);
+      if (r.flow) onDraft(r.flow);
+      setUsage((u) => (u ? { ...u, ...r.usage } : u));
+    } catch (err) {
+      setChat((c) => [...c, { role: 'assistant', text: errorMessage(err), error: true }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    void ask(text);
+  }
+
+  return (
+    <div className="card card-pad sora">
+      <div className="sora-head">
+        <span className="sora-mark"><Sparkles size={17} /></span>
+        <div style={{ flex: 1 }}>
+          <strong>Sora</strong>
+          <small style={{ display: 'block' }} className="muted">Descreva o atendimento que você quer e eu monto o fluxo. Você revisa no fluxograma antes de salvar.</small>
+        </div>
+        {canUndo && <button type="button" className="btn btn-ghost btn-sm" onClick={onUndo}><Undo2 size={14} />Desfazer última mudança</button>}
+        {usage?.enabled && <small className="muted">{usage.used}/{usage.limit} no mês</small>}
+      </div>
+
+      {disabled ? (
+        <p className="muted">{usage ? 'A Sora ainda não está configurada neste servidor. Use o modo manual por enquanto.' : 'Carregando a Sora…'}</p>
+      ) : (
+        <>
+          {(chat.length > 0 || busy) && (
+            <div className="sora-chat" ref={chatRef}>
+              {chat.map((m, i) => (
+                <div key={i} className={`bubble${m.role === 'user' ? ' own' : ''}`}>
+                  {m.text}
+                  {m.changed && <small>Fluxograma atualizado (ainda não salvo)</small>}
+                </div>
+              ))}
+              {busy && <div className="bubble"><span className="spinner" /> Montando…</div>}
+            </div>
+          )}
+          {chat.length === 0 && (
+            <div className="sora-ideas">
+              {SORA_IDEAS.map((idea) => <button key={idea} type="button" className="chip" disabled={busy || limitReached} onClick={() => ask(idea)}>{idea}</button>)}
+            </div>
+          )}
+          <form className="sora-input" onSubmit={submit}>
+            <textarea
+              className="textarea"
+              rows={2}
+              maxLength={2000}
+              value={text}
+              disabled={busy || limitReached}
+              placeholder={limitReached ? 'Limite de pedidos do mês atingido. Use o modo manual.' : 'Ex.: Sou uma barbearia. Quero agendar, ver preços, endereço e falar com o barbeiro, com linguagem descontraída.'}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(text); } }}
+            />
+            <button className="btn btn-primary" disabled={busy || limitReached || !text.trim()} aria-label="Enviar para a Sora"><Send size={16} /></button>
+          </form>
+        </>
+      )}
+    </div>
   );
 }
 

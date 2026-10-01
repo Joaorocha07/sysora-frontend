@@ -88,6 +88,9 @@ export type FlowNode = {
   prompt?: string; options?: FlowNode[]; action?: FlowAction; next?: 'menu' | 'parent';
 };
 export type BotFlow = { flow: FlowNode; custom: boolean };
+export type SoraMessage = { role: 'user' | 'assistant'; text: string };
+export type SoraUsage = { used: number; limit: number; enabled: boolean };
+export type SoraReply = { reply: string; flow: FlowNode | null; usage: { used: number; limit: number } };
 
 export type Dashboard = {
   clients: number; newClientsMonth: number; todayCount: number; monthAppointments: number; monthCompleted: number;
@@ -284,12 +287,21 @@ export const authApi = {
 export type CompanyInput = { name: string; document?: string | null; phone?: string | null; email?: string | null };
 export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEndsAt?: string | null; paidUntil?: string | null };
 // Configurações da plataforma, editadas pelo admin master.
-export type PlatformSettings = { publicSignupEnabled: boolean };
+export type PlatformSettings = { publicSignupEnabled: boolean; aiCreditCents: number };
+// Gastos com IA (Sora), estimados pelos tokens de cada chamada.
+export type AiUsageSummary = {
+  configured: boolean; model: string; monthlyLimitPerCompany: number;
+  creditUsd: number; spentUsd: number; remainingUsd: number; calls: number;
+  month: { spentUsd: number; calls: number; inputTokens: number; outputTokens: number };
+  byCompany: { companyId: string | null; name: string; calls: number; spentUsd: number }[];
+  recent: { id: string; company: string; feature: string; model: string; inputTokens: number; outputTokens: number; costUsd: number; createdAt: string }[];
+};
 export const adminApi = {
   stats: () => get<AdminStats>('/admin/stats'),
   settings: () => get<{ settings: PlatformSettings }>('/admin/settings').then((r) => r.settings),
   updateSettings: (input: Partial<PlatformSettings>) =>
     send<{ settings: PlatformSettings }>('PATCH', '/admin/settings', input).then((r) => r.settings),
+  aiUsage: () => get<AiUsageSummary>('/admin/ai-usage'),
   users: () => get<{ users: AdminUser[] }>('/admin/users').then((r) => r.users),
   companies: () => get<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies),
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>
@@ -403,4 +415,7 @@ export const whatsappApi = {
   flow: () => get<BotFlow>('/whatsapp/flow'),
   saveFlow: (flow: FlowNode) => send<BotFlow>('PUT', '/whatsapp/flow', { flow }),
   resetFlow: () => send<BotFlow>('DELETE', '/whatsapp/flow'),
+  // Sora (IA que monta o fluxo): devolve um rascunho; quem salva é saveFlow.
+  soraUsage: () => get<SoraUsage>('/whatsapp/flow/sora'),
+  askSora: (messages: SoraMessage[], flow: FlowNode) => send<SoraReply>('POST', '/whatsapp/flow/sora', { messages, flow }),
 };

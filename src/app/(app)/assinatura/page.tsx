@@ -2,9 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowRight, Building2, CreditCard, MessageCircle, Plus, Sparkles, XCircle } from 'lucide-react';
+import { ArrowRight, Building2, CreditCard, Plus, Sparkles, XCircle } from 'lucide-react';
 import PlanCard from '@/components/PlanCard';
-import { PaymentCheckoutModal } from '@/components/PaymentCheckoutModal';
 import { ConfirmDialog, Field, FormError, Loading, Modal, PageHead, useToast } from '@/components/ui';
 import {
   accountApi, errorMessage, subscriptionsApi,
@@ -60,13 +59,12 @@ function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreate
 export default function AssinaturaPage() {
   const router = useRouter();
   const toast = useToast();
-  const { isAdmin, user, company, switchCompany, reloadSession } = useAuth();
+  const { isAdmin, company, switchCompany, reloadSession } = useAuth();
 
   const [data, setData] = useState<AccountOverview | null>(null);
   const [mpStatus, setMpStatus] = useState<MpSubscriptionStatus | null>(null);
   const [changing, setChanging] = useState<PlanInfo | null>(null);
   const [creating, setCreating] = useState(false);
-  const [checkoutPlan, setCheckoutPlan] = useState<PlanInfo | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -158,9 +156,9 @@ export default function AssinaturaPage() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setCheckoutPlan(data.plans.find((p) => p.id === sub.plan) ?? data.plans[0])}
+              onClick={() => router.push(`/assinatura/checkout?plan=${sub.plan}`)}
             >
-              <MessageCircle size={16} />
+              <CreditCard size={16} />
               {sub.status === 'TRIAL' ? 'Assinar agora' : 'Regularizar pagamento'}
             </button>
           )}
@@ -196,7 +194,7 @@ export default function AssinaturaPage() {
           <div className="row-wrap" style={{ padding: '16px 24px 22px', gap: 12 }}>
             <Sparkles size={16} />
             <span className="muted" style={{ flex: 1 }}>Tem outra unidade ou outro negócio? No plano Avançado você gerencia até 2 empresas, cada uma com o seu WhatsApp.</span>
-            <button type="button" className="btn btn-sm btn-outline" onClick={() => setCheckoutPlan(data.plans.find((p) => p.id === 'AVANCADO')!)}>Assinar o Avançado</button>
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => router.push('/assinatura/checkout?plan=AVANCADO')}>Assinar o Avançado</button>
           </div>
         )}
       </div>
@@ -210,27 +208,12 @@ export default function AssinaturaPage() {
             current={plan.id === sub.plan}
             action={plan.id === sub.plan
               ? <button type="button" className="btn btn-outline btn-lg btn-block" disabled>Plano atual</button>
-              : <button type="button" className="btn btn-primary btn-lg btn-block" onClick={() => setCheckoutPlan(plan)}>
+              : <button type="button" className="btn btn-primary btn-lg btn-block" onClick={() => router.push(`/assinatura/checkout?plan=${plan.id}`)}>
                   {sub.status === 'ACTIVE' ? `Mudar para o ${plan.name}` : `Assinar o ${plan.name}`}
                 </button>}
           />
         ))}
       </div>
-
-      {/* Checkout de pagamento via cartão (Mercado Pago) */}
-      {checkoutPlan && user && (
-        <PaymentCheckoutModal
-          plan={checkoutPlan}
-          payerEmail={user.email}
-          onClose={() => setCheckoutPlan(null)}
-          onSuccess={async () => {
-            setCheckoutPlan(null);
-            await reloadSession();
-            load();
-            toast(`Plano ${checkoutPlan.name} ativado com sucesso!`);
-          }}
-        />
-      )}
 
       {/* Confirmação de troca de plano sem pagamento (admin master) */}
       {changing && (

@@ -237,12 +237,22 @@ export type MpSubscriptionStatus = {
   lastFourDigits: string | null;
 };
 
+export type PixData = {
+  paymentId: string;
+  qrCode: string;
+  qrCodeBase64: string;
+};
+
 export const subscriptionsApi = {
-  checkout: (body: { cardTokenId: string; payerEmail: string; plan: PlanId }) =>
+  checkout: (body: { cardTokenId: string; payerEmail: string; plan: PlanId; installments?: number; paymentMethodId?: string }) =>
     send<{ subscription: Subscription }>('POST', '/subscriptions/checkout', body).then((r) => r.subscription),
   cancel: () =>
     send<{ subscription: Subscription }>('POST', '/subscriptions/cancel').then((r) => r.subscription),
   status: () => get<MpSubscriptionStatus>('/subscriptions/status'),
+  generatePix: (body: { plan: PlanId; payerEmail: string }) =>
+    send<PixData>('POST', '/subscriptions/pix', body),
+  pixStatus: (paymentId: string) =>
+    get<{ paid: boolean }>(`/subscriptions/pix/${paymentId}/status`),
 };
 
 export type MemberInput = { name: string; email: string; phone?: string | null; password: string; role: Role };

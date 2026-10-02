@@ -637,17 +637,50 @@ function NodeEditor({ root, node, parent, depth, vars, onClose, onApply, onRemov
   );
 }
 
-// Testa o fluxo clicando nas opções, como se fosse o cliente.
+// Testa o fluxo clicando nas opções, como se fosse o cliente. Também dá para
+// escrever do jeito do cliente: a IA do atendimento (backend) diz o que entendeu.
 function Simulator({ root, vars }: { root: FlowNode; vars: Vars }) {
+  const toast = useToast();
   const start = () => bubblesOf(root, root, null, vars);
   const [chat, setChat] = useState<{ bubbles: Bubble[]; own?: string }[]>(() => [{ bubbles: start().bubbles }]);
   const [menu, setMenu] = useState<FlowNode | null>(root);
+  const [typed, setTyped] = useState('');
+  const [thinking, setThinking] = useState(false);
 
-  function choose(option: FlowNode, index: number) {
+  function choose(option: FlowNode, index: number, own = String(index + 1), note?: string) {
     if (!menu) return;
     const result = bubblesOf(root, option, menu, vars);
-    setChat((c) => [...c, { own: String(index + 1), bubbles: result.bubbles }]);
+    setChat((c) => [...c, { own, bubbles: [...(note ? [{ text: note, system: true }] : []), ...result.bubbles] }]);
     setMenu(result.menu);
+  }
+
+  async function sendTyped(e: FormEvent) {
+    e.preventDefault();
+    const text = typed.trim();
+    if (!text || !menu || thinking) return;
+    const options = menu.options ?? [];
+    const byNumber = /^\d$/.test(text) ? options[Number(text) - 1] : undefined;
+    if (byNumber) { setTyped(''); choose(byNumber, Number(text) - 1); return; }
+    if (text === '0' && menu.id !== root.id) { setTyped(''); back(); return; }
+
+    setThinking(true);
+    try {
+      const r = await whatsappApi.understand(clean(root), text, menu.id === root.id ? undefined : menu.id);
+      setTyped('');
+      const option = options.find((o) => o.id === r.optionId);
+      const details = [r.services.length && `serviço: ${r.services.join(' + ')}`, r.date && `dia: ${r.date.split('-').reverse().join('/')}`, r.time && `horário: ${r.time}`].filter(Boolean);
+      if (option) {
+        const note = `IA entendeu: “${option.label}”${details.length ? ` (${details.join(', ')})` : ''}.${details.length && option.action === 'agendar' ? ' No WhatsApp o bot já usa esses dados e agenda direto se o horário estiver livre.' : ''}`;
+        choose(option, options.indexOf(option), text, note);
+      } else {
+        const reply = r.answer ? `${r.answer}\n\n${menuText(menu, menu.id === root.id, vars)}` : `Não entendi.\n\n${menuText(menu, menu.id === root.id, vars)}`;
+        setChat((c) => [...c, { own: text, bubbles: [{ text: reply }] }]);
+      }
+    } catch (err) {
+      toast(errorMessage(err), true);
+    } finally {
+      setThinking(false);
+    }
   }
 
   function back() {
@@ -684,6 +717,12 @@ function Simulator({ root, vars }: { root: FlowNode; vars: Vars }) {
           <button type="button" className="chip" onClick={restart}>Nova conversa</button>
         )}
       </div>
+      {menu && (
+        <form className="flow-sim-input" onSubmit={sendTyped}>
+          <input className="input" maxLength={600} value={typed} placeholder="Ou escreva como o cliente: “queria marcar um corte”" onChange={(e) => setTyped(e.target.value)} disabled={thinking} />
+          <button type="submit" className="icon-btn bordered" title="Enviar" disabled={!typed.trim() || thinking}>{thinking ? <span className="spinner" /> : <Send size={15} />}</button>
+        </form>
+      )}
     </div>
   );
 }

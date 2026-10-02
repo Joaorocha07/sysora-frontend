@@ -129,7 +129,7 @@ function build() {
   const settings: Settings = {
     openingTime: '09:00', closingTime: '18:00', workDays: [1, 2, 3, 4, 5, 6], slotMinutes: 30, slotCapacity: 1,
     lunchEnabled: true, lunchStart: '12:00', lunchEnd: '13:00', whatsappConnected: false, whatsappPhone: null,
-    botEnabled: true, autoCreateClient: true, askName: true,
+    botEnabled: true, autoCreateClient: true, askName: true, botAiEnabled: true, transcribeAudio: true,
     greetingMessage: 'Olá, {nome}! Bem-vindo(a) à {empresa}.', handoffMessage: 'Certo! Uma pessoa da nossa equipe vai te responder por aqui em instantes.',
     confirmationMessage: 'Agendado! {servico} no dia {data} às {hora}. Até lá, {nome}!',
     reminderEnabled: true, reminderTime: '10:00', reminderMessage: 'Oi, {nome}! Passando para lembrar do seu horário amanhã: {servico} no dia {data} às {hora}.',
@@ -171,6 +171,22 @@ function defaultDemoFlow(greeting: string): FlowNode {
   return {
     id: 'inicio', label: 'Início', type: 'menu', messages: [greeting], together: false, prompt: 'Como posso te ajudar? Responda com o número:',
     options: (Object.keys(labels) as (keyof typeof labels)[]).map((action) => ({ id: action, label: labels[action], type: 'action', action, messages: [], together: true })),
+  };
+}
+
+// Sem servidor não há IA: palavras-chave imitam o que ela entenderia no simulador.
+function demoUnderstand({ flow, text }: { flow: FlowNode; text: string }) {
+  const t = text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const intent = /remarc|cancel|desmarc|meus/.test(t) ? 'meus' : /agend|marcar|horario/.test(t) ? 'agendar'
+    : /preco|valor|quanto|servico/.test(t) ? 'servicos' : /atendente|pessoa|humano|falar/.test(t) ? 'equipe' : 'pergunta';
+  const option = flow.options?.find((o) => o.type === 'action' && o.action === intent)
+    ?? flow.options?.find((o) => t.includes(o.label.toLowerCase()));
+  return {
+    optionId: option?.id ?? null,
+    intent: option ? intent : 'pergunta',
+    answer: option ? null : 'No modo demonstração a IA não responde perguntas. Com o servidor, ela usa os dados da sua empresa.',
+    services: [], date: null, time: null,
+    usage: { used: 0, limit: 1500, available: true, transcription: true },
   };
 }
 
@@ -490,6 +506,8 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
     if (method === 'DELETE') d.botFlow = null;
     return { flow: d.botFlow ?? defaultDemoFlow(d.settings.greetingMessage), custom: Boolean(d.botFlow) };
   }
+  if (path === '/whatsapp/ai') return { used: 0, limit: 1500, available: true, transcription: true };
+  if (path === '/whatsapp/flow/understand') return demoUnderstand(body as { flow: FlowNode; text: string });
 
   return fail('Recurso indisponível no modo demonstração.', 404);
 }

@@ -70,7 +70,7 @@ export type Settings = {
   openingTime: string; closingTime: string; workDays: number[]; slotMinutes: number; slotCapacity: number;
   lunchEnabled: boolean; lunchStart: string; lunchEnd: string;
   whatsappConnected: boolean; whatsappPhone: string | null;
-  botEnabled: boolean; autoCreateClient: boolean; askName: boolean;
+  botEnabled: boolean; autoCreateClient: boolean; askName: boolean; botAiEnabled: boolean; transcribeAudio: boolean;
   greetingMessage: string; handoffMessage: string; confirmationMessage: string;
   reminderEnabled: boolean; reminderTime: string; reminderMessage: string;
   hourReminderEnabled: boolean; hourReminderMinutes: number; hourReminderMessage: string;
@@ -90,6 +90,12 @@ export type FlowNode = {
 export type BotFlow = { flow: FlowNode; custom: boolean };
 export type SoraMessage = { role: 'user' | 'assistant'; text: string };
 export type SoraUsage = { used: number; limit: number; enabled: boolean };
+// IA do atendimento (entende texto livre e áudios no WhatsApp).
+export type BotAiStatus = { used: number; limit: number; available: boolean; transcription: boolean };
+export type BotAiUnderstood = {
+  optionId: string | null; intent: string; answer: string | null;
+  services: string[]; date: string | null; time: string | null; usage: BotAiStatus;
+};
 export type SoraReply = { reply: string; flow: FlowNode | null; usage: { used: number; limit: number } };
 
 export type Dashboard = {
@@ -418,4 +424,7 @@ export const whatsappApi = {
   // Sora (IA que monta o fluxo): devolve um rascunho; quem salva é saveFlow.
   soraUsage: () => get<SoraUsage>('/whatsapp/flow/sora'),
   askSora: (messages: SoraMessage[], flow: FlowNode) => send<SoraReply>('POST', '/whatsapp/flow/sora', { messages, flow }),
+  // IA do atendimento: status/uso e o que ela entenderia de uma mensagem (simulador).
+  ai: () => get<BotAiStatus>('/whatsapp/ai'),
+  understand: (flow: FlowNode, text: string, nodeId?: string) => send<BotAiUnderstood>('POST', '/whatsapp/flow/understand', { flow, text, nodeId }),
 };

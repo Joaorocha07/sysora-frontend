@@ -6,7 +6,7 @@ import { Bell, Bot, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Sav
 import { useShell } from '@/components/AppShell';
 import { BotFlowEditor } from '@/components/BotFlowEditor';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
-import { errorMessage, settingsApi, whatsappApi, type Settings, type WhatsAppStatus } from '@/lib/api';
+import { errorMessage, settingsApi, whatsappApi, type BotAiStatus, type Settings, type WhatsAppStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { duration } from '@/lib/format';
 
@@ -159,9 +159,11 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
   const [saved, setSaved] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ai, setAi] = useState<BotAiStatus | null>(null);
 
   useEffect(() => {
     settingsApi.get().then((r) => { setSaved(r.settings); setDraft(r.settings); }).catch((err) => toast(errorMessage(err), true));
+    whatsappApi.ai().then(setAi).catch(() => {});
   }, [toast]);
 
   if (!draft || !saved) return <Loading />;
@@ -193,6 +195,23 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
             <Switch checked={draft.botEnabled} onChange={(v) => set('botEnabled', v)} label="Bot ligado" description="Desligado, as mensagens continuam chegando em Conversas, mas ninguém responde automaticamente." />
             <Switch checked={draft.autoCreateClient} onChange={(v) => set('autoCreateClient', v)} label="Cadastrar clientes automaticamente" description="Quem manda mensagem vira cliente. Desligado, o cliente só é cadastrado quando conclui um agendamento." />
             <Switch checked={draft.askName} onChange={(v) => set('askName', v)} label="Perguntar o nome" description="Quando o perfil do WhatsApp não traz um nome, o bot pergunta antes de agendar." />
+            <div className="divider" />
+            <Switch
+              checked={draft.botAiEnabled}
+              onChange={(v) => set('botAiEnabled', v)}
+              label="Entender mensagens escritas (IA)"
+              description={ai && !ai.available
+                ? 'A IA ainda não está configurada no servidor. Sem ela, o cliente responde pelos números.'
+                : `O cliente pode escrever do jeito dele ("queria marcar um corte amanhã às 14h") e o bot entende, escolhe a opção e agenda. Também responde dúvidas com os dados da empresa.${ai ? ` Usado este mês: ${ai.used} de ${ai.limit} mensagens.` : ''}`}
+            />
+            <Switch
+              checked={draft.transcribeAudio}
+              onChange={(v) => set('transcribeAudio', v)}
+              label="Ouvir áudios"
+              description={ai && !ai.transcription
+                ? 'A transcrição ainda não está configurada no servidor. Sem ela, o bot pede para o cliente escrever.'
+                : 'Áudios do cliente viram texto, aparecem transcritos em Conversas e o bot responde como se ele tivesse digitado.'}
+            />
             <div className="divider" />
             <Field label="Confirmação do agendamento" hint={`Enviada quando o cliente conclui o agendamento. Use ${VARS}.`}><textarea className="textarea" {...text('confirmationMessage')} /></Field>
             <div className="phone-preview">

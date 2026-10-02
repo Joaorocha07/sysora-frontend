@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Clock, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clock, Pencil, Plus, Sparkles, Trash2, Undo2, Wrench } from 'lucide-react';
 import { ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToast } from '@/components/ui';
 import { errorMessage, servicesApi, type Service } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -17,6 +17,25 @@ function ServiceModal({ service, onClose, onSaved }: { service?: Service | null;
   const [active, setActive] = useState(service?.active ?? true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [improving, setImproving] = useState(false);
+  // Texto antes da IA, para desfazer.
+  const [beforeAi, setBeforeAi] = useState<string | null>(null);
+
+  async function improve() {
+    setError(null);
+    setImproving(true);
+    try {
+      const text = await servicesApi.improveDescription({
+        name, description: description || null, priceCents: parseMoney(price) || undefined, durationMinutes: Number(minutes) || undefined,
+      });
+      setBeforeAi(description);
+      setDescription(text);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setImproving(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -46,9 +65,19 @@ function ServiceModal({ service, onClose, onSaved }: { service?: Service | null;
       <form id="service-form" className="stack" onSubmit={submit}>
         <FormError message={error} />
         <Field label="Nome do serviço"><input className="input" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Consulta, Corte, Aula experimental" /></Field>
-        <Field label="Descrição (opcional)" hint="Aparece para o cliente quando ele pede a lista de serviços no WhatsApp.">
-          <textarea className="textarea" maxLength={300} style={{ minHeight: 72 }} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </Field>
+        <div className="stack" style={{ gap: 8 }}>
+          <Field label="Descrição (opcional)" hint="Aparece para o cliente quando ele pede a lista de serviços no WhatsApp.">
+            <textarea className="textarea" maxLength={300} style={{ minHeight: 72 }} value={description} disabled={improving} onChange={(e) => { setDescription(e.target.value); setBeforeAi(null); }} />
+          </Field>
+          <div className="row-wrap" style={{ gap: 8 }}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={improve} disabled={improving || !name.trim()} title={name.trim() ? undefined : 'Preencha o nome do serviço primeiro'}>
+              {improving ? <span className="spinner" /> : <Sparkles size={14} />}{description.trim() ? 'Melhorar com IA' : 'Escrever com IA'}
+            </button>
+            {beforeAi !== null && !improving && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDescription(beforeAi); setBeforeAi(null); }}><Undo2 size={14} />Desfazer</button>
+            )}
+          </div>
+        </div>
         <Field label="Duração">
           <div className="row-wrap">
             <div className="chips">

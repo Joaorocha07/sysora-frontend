@@ -377,6 +377,9 @@ export const servicesApi = {
   create: (input: ServiceInput) => send<{ service: Service }>('POST', '/services', input).then((r) => r.service),
   update: (id: string, input: Partial<ServiceInput>) => send<{ service: Service }>('PATCH', `/services/${id}`, input).then((r) => r.service),
   remove: (id: string) => send('DELETE', `/services/${id}`),
+  // Texto sugerido pela IA para a descrição (não salva nada).
+  improveDescription: (input: { name: string; description?: string | null; priceCents?: number; durationMinutes?: number }) =>
+    send<{ description: string }>('POST', '/services/improve-description', input).then((r) => r.description),
 };
 
 export type AppointmentInput = {

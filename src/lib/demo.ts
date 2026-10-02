@@ -403,6 +403,11 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
     return { client: { ...client, appointments: d.appointments.filter((a) => a.clientId === client.id).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime)) } };
   }
 
+  if (path === '/services/improve-description') {
+    const { name, description } = body as { name: string; description?: string | null };
+    const base = description?.trim() || `${name} com atendimento cuidadoso e profissional.`;
+    return { description: `${base.replace(/[.!]*$/, '')}. Agende pelo WhatsApp e garanta seu horário! ✨`.slice(0, 300) };
+  }
   if (path === '/services' && method === 'GET') return { services: [...d.services].sort((a, b) => a.position - b.position).map(withCount) };
   if (path === '/services' && method === 'POST') {
     if (d.services.some((s) => s.name.toLowerCase() === String(body.name).toLowerCase())) fail('Já existe um serviço com esse nome.', 409);

@@ -652,3 +652,12 @@ button.price-card.selected { box-shadow: 0 0 0 2px var(--ink); }
   .flow-child::before { left: -18px; width: 18px; }
   .flow-child::after { left: -18px; }
 }
+
+/* ============ Recursos do plano Avançado (IA) ============ */
+.ai-plan-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 8px; border-radius: var(--pill); background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; vertical-align: 1px; }
+.ai-plan-notice { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px dashed var(--line-strong); border-radius: 16px; background: var(--surface-2); font-size: 14px; }
+.ai-plan-notice > svg { flex: none; color: var(--muted); }
+.ai-plan-notice > span { flex: 1; min-width: 0; }
+.ai-plan-notice .btn { flex: none; }
+.ai-plan-notice.compact { padding: 10px 12px; gap: 10px; font-size: 12px; border-radius: 12px; }
+@media (max-width: 640px) { .ai-plan-notice { flex-wrap: wrap; } }

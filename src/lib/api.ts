@@ -24,6 +24,8 @@ export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
 export type Subscription = {
   accountId: string; plan: PlanId; planName: string; priceCents: number; status: SubscriptionStatus;
   trialEndsAt: string | null; paidUntil: string | null; active: boolean; maxCompanies: number; maxEmployees: number;
+  // Recursos de IA liberados: plano Avançado pago (o teste grátis não tem IA).
+  ai: boolean;
 };
 export type PlanInfo = { id: PlanId; name: string; priceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
 export type Session = {
@@ -89,9 +91,9 @@ export type FlowNode = {
 };
 export type BotFlow = { flow: FlowNode; custom: boolean };
 export type SoraMessage = { role: 'user' | 'assistant'; text: string };
-export type SoraUsage = { used: number; limit: number; enabled: boolean };
+export type SoraUsage = { used: number; limit: number; enabled: boolean; allowed: boolean };
 // IA do atendimento (entende texto livre e áudios no WhatsApp).
-export type BotAiStatus = { used: number; limit: number; available: boolean; transcription: boolean };
+export type BotAiStatus = { used: number; limit: number; available: boolean; transcription: boolean; allowed: boolean };
 export type BotAiUnderstood = {
   optionId: string | null; intent: string; answer: string | null;
   services: string[]; date: string | null; time: string | null; usage: BotAiStatus;

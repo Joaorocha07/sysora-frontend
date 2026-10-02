@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui';
 import { useUnsavedChanges } from '@/components/UnsavedChanges';
+import { AiPlanBadge, AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
 import {
   errorMessage, servicesApi, settingsApi, whatsappApi,
   type FlowAction, type FlowNode, type FlowNodeType, type Service, type Settings, type SoraMessage, type SoraUsage,
@@ -129,6 +130,8 @@ function bubblesOf(root: FlowNode, node: FlowNode, parent: FlowNode | null, vars
 export function BotFlowEditor() {
   const toast = useToast();
   const { company } = useAuth();
+  // Sora e teste com texto livre: só no plano Avançado pago.
+  const ai = useAiPlan();
   const [saved, setSaved] = useState<FlowNode | null>(null);
   const [flow, setFlow] = useState<FlowNode | null>(null);
   const [custom, setCustom] = useState(false);
@@ -208,7 +211,7 @@ export function BotFlowEditor() {
             <p className="muted" style={{ marginTop: 4 }}>Clique numa etapa para editar. Cada opção de um menu vira um número que o cliente responde. Use {'{nome}'} e {'{empresa}'} nos textos.</p>
             <div className="segmented" style={{ marginTop: 12, width: 'fit-content' }}>
               <button type="button" className={mode === 'manual' ? 'on' : ''} onClick={() => setMode('manual')}><PenLine size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Montar manual</button>
-              <button type="button" className={mode === 'sora' ? 'on' : ''} onClick={() => setMode('sora')}><Sparkles size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Criar com a Sora</button>
+              <button type="button" className={mode === 'sora' ? 'on' : ''} onClick={() => setMode('sora')}><Sparkles size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Criar com a Sora{!ai && <AiPlanBadge />}</button>
             </div>
           </div>
           <div className="row-wrap">
@@ -226,7 +229,11 @@ export function BotFlowEditor() {
         </div>
       </div>
 
-      {mode === 'sora' && (
+      {mode === 'sora' && !ai && (
+        <div className="card card-pad"><AiPlanNotice feature="A Sora, IA que monta o fluxo para você," /></div>
+      )}
+
+      {mode === 'sora' && ai && (
         <SoraPanel
           flow={flow}
           problems={problems}
@@ -240,7 +247,7 @@ export function BotFlowEditor() {
         <div className="card flow-canvas">
           <FlowBranch node={flow} index={null} isRoot depth={0} data={data} onEdit={setEditing} onAdd={addOption} />
         </div>
-        <Simulator key={JSON.stringify(flow)} root={flow} vars={vars} />
+        <Simulator key={JSON.stringify(flow)} root={flow} vars={vars} ai={ai} />
       </div>
 
       {editTarget && (
@@ -430,7 +437,7 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
   const [busy, setBusy] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { whatsappApi.soraUsage().then(setUsage).catch(() => setUsage({ used: 0, limit: 0, enabled: false })); }, []);
+  useEffect(() => { whatsappApi.soraUsage().then(setUsage).catch(() => setUsage({ used: 0, limit: 0, enabled: false, allowed: false })); }, []);
   useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight }); }, [chat, busy]);
 
   const disabled = !usage?.enabled;
@@ -647,7 +654,7 @@ function NodeEditor({ root, node, parent, depth, vars, onClose, onApply, onRemov
 
 // Testa o fluxo clicando nas opções, como se fosse o cliente. Também dá para
 // escrever do jeito do cliente: a IA do atendimento (backend) diz o que entendeu.
-function Simulator({ root, vars }: { root: FlowNode; vars: Vars }) {
+function Simulator({ root, vars, ai }: { root: FlowNode; vars: Vars; ai: boolean }) {
   const toast = useToast();
   const start = () => bubblesOf(root, root, null, vars);
   const [chat, setChat] = useState<{ bubbles: Bubble[]; own?: string }[]>(() => [{ bubbles: start().bubbles }]);
@@ -725,7 +732,8 @@ function Simulator({ root, vars }: { root: FlowNode; vars: Vars }) {
           <button type="button" className="chip" onClick={restart}>Nova conversa</button>
         )}
       </div>
-      {menu && (
+      {menu && !ai && <AiPlanNotice compact feature="Testar mensagens escritas como o cliente (IA)" />}
+      {menu && ai && (
         <form className="flow-sim-input" onSubmit={sendTyped}>
           <input className="input" maxLength={600} value={typed} placeholder="Ou escreva como o cliente: “queria marcar um corte”" onChange={(e) => setTyped(e.target.value)} disabled={thinking} />
           <button type="submit" className="icon-btn bordered" title="Enviar" disabled={!typed.trim() || thinking}>{thinking ? <span className="spinner" /> : <Send size={15} />}</button>

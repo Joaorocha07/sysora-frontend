@@ -7,6 +7,7 @@ import { useShell } from '@/components/AppShell';
 import { BotFlowEditor } from '@/components/BotFlowEditor';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
 import { useConfirmLeave, useUnsavedChanges } from '@/components/UnsavedChanges';
+import { AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
 import { errorMessage, settingsApi, whatsappApi, type BotAiStatus, type Settings, type WhatsAppStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { duration } from '@/lib/format';
@@ -161,6 +162,7 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
   const [draft, setDraft] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState<BotAiStatus | null>(null);
+  const aiPlan = useAiPlan();
 
   useEffect(() => {
     settingsApi.get().then((r) => { setSaved(r.settings); setDraft(r.settings); }).catch((err) => toast(errorMessage(err), true));
@@ -204,8 +206,10 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
             <Switch checked={draft.autoCreateClient} onChange={(v) => set('autoCreateClient', v)} label="Cadastrar clientes automaticamente" description="Quem manda mensagem vira cliente. Desligado, o cliente só é cadastrado quando conclui um agendamento." />
             <Switch checked={draft.askName} onChange={(v) => set('askName', v)} label="Perguntar o nome" description="Quando o perfil do WhatsApp não traz um nome, o bot pergunta antes de agendar." />
             <div className="divider" />
+            {!aiPlan && <AiPlanNotice feature="O bot que entende mensagens escritas e áudios" />}
             <Switch
-              checked={draft.botAiEnabled}
+              disabled={!aiPlan}
+              checked={aiPlan && draft.botAiEnabled}
               onChange={(v) => set('botAiEnabled', v)}
               label="Entender mensagens escritas (IA)"
               description={ai && !ai.available
@@ -213,7 +217,8 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
                 : `O cliente pode escrever do jeito dele ("queria marcar um corte amanhã às 14h") e o bot entende, escolhe a opção e agenda. Também responde dúvidas com os dados da empresa.${ai ? ` Usado este mês: ${ai.used} de ${ai.limit} mensagens.` : ''}`}
             />
             <Switch
-              checked={draft.transcribeAudio}
+              disabled={!aiPlan}
+              checked={aiPlan && draft.transcribeAudio}
               onChange={(v) => set('transcribeAudio', v)}
               label="Ouvir áudios"
               description={ai && !ai.transcription

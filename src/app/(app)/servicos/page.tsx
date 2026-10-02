@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Clock, Pencil, Plus, Sparkles, Trash2, Undo2, Wrenc
 import { ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToast } from '@/components/ui';
 import { errorMessage, servicesApi, type Service } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { AiPlanBadge, useAiPlan } from '@/components/AiPlanLock';
 import { duration, money, parseMoney } from '@/lib/format';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120];
@@ -20,6 +21,7 @@ function ServiceModal({ service, onClose, onSaved }: { service?: Service | null;
   const [improving, setImproving] = useState(false);
   // Texto antes da IA, para desfazer.
   const [beforeAi, setBeforeAi] = useState<string | null>(null);
+  const aiPlan = useAiPlan();
 
   async function improve() {
     setError(null);
@@ -70,9 +72,10 @@ function ServiceModal({ service, onClose, onSaved }: { service?: Service | null;
             <textarea className="textarea" maxLength={300} style={{ minHeight: 72 }} value={description} disabled={improving} onChange={(e) => { setDescription(e.target.value); setBeforeAi(null); }} />
           </Field>
           <div className="row-wrap" style={{ gap: 8 }}>
-            <button type="button" className="btn btn-outline btn-sm" onClick={improve} disabled={improving || !name.trim()} title={name.trim() ? undefined : 'Preencha o nome do serviço primeiro'}>
-              {improving ? <span className="spinner" /> : <Sparkles size={14} />}{description.trim() ? 'Melhorar com IA' : 'Escrever com IA'}
+            <button type="button" className="btn btn-outline btn-sm" onClick={improve} disabled={!aiPlan || improving || !name.trim()} title={!aiPlan ? 'Disponível no plano Avançado' : name.trim() ? undefined : 'Preencha o nome do serviço primeiro'}>
+              {improving ? <span className="spinner" /> : <Sparkles size={14} />}{description.trim() ? 'Melhorar com IA' : 'Escrever com IA'}{!aiPlan && <AiPlanBadge />}
             </button>
+            {!aiPlan && <small>Disponível no plano Avançado. No teste grátis e no plano Inicial, escreva a descrição manualmente.</small>}
             {beforeAi !== null && !improving && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDescription(beforeAi); setBeforeAi(null); }}><Undo2 size={14} />Desfazer</button>
             )}

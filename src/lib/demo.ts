@@ -55,6 +55,8 @@ function subscription(): Subscription {
   return {
     accountId: 'demo-account', plan: plan.id, planName: plan.name, priceCents: plan.priceCents, status: 'TRIAL',
     trialEndsAt, paidUntil: null, active: true, maxCompanies: plan.maxCompanies, maxEmployees: plan.maxEmployees,
+    // Como no servidor: o teste grátis não tem IA.
+    ai: false,
   };
 }
 
@@ -511,7 +513,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
     if (method === 'DELETE') d.botFlow = null;
     return { flow: d.botFlow ?? defaultDemoFlow(d.settings.greetingMessage), custom: Boolean(d.botFlow) };
   }
-  if (path === '/whatsapp/ai') return { used: 0, limit: 1500, available: true, transcription: true };
+  if (path === '/whatsapp/ai') return { used: 0, limit: 1500, available: true, transcription: true, allowed: d.sub.ai };
   if (path === '/whatsapp/flow/understand') return demoUnderstand(body as { flow: FlowNode; text: string });
 
   return fail('Recurso indisponível no modo demonstração.', 404);

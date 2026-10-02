@@ -20,7 +20,9 @@ import { ROLE_LABELS, firstName } from '@/lib/format';
 
 // Dias até o fim do teste grátis (arredondado para cima).
 // Dias inteiros que faltam (6,1 dias → 6); no último dia mostra "termina hoje".
-const daysUntil = (date: string | null) => (date ? Math.max(0, Math.floor((new Date(date).getTime() - Date.now()) / 86_400_000)) : 0);
+// Conta dias do calendário (hoje → dia do fim), não blocos de 24h: no dia em que termina, mostra "termina hoje".
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+const daysUntil = (date: string | null) => (date ? Math.max(0, Math.round((startOfDay(new Date(date)) - startOfDay(new Date())) / 86_400_000)) : 0);
 const shortDate = (date: string | null) => (date ? new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '');
 
 function SubscriptionBar({ subscription, isAdmin }: { subscription: Subscription; isAdmin: boolean }) {

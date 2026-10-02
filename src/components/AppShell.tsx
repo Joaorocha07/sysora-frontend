@@ -10,6 +10,7 @@ import {
 import Logo from './Logo';
 import LogoutDialog from './LogoutDialog';
 import ThemeToggle from './ThemeToggle';
+import { useConfirmLeave } from './UnsavedChanges';
 import { Avatar, Loading, useToast } from './ui';
 import {
   authApi, conversationsApi, errorMessage, subscribeNotice, subscribeSubscriptionBlocked, usersApi, whatsappApi, type CompanyChoice, type Subscription,
@@ -94,6 +95,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
   const [demo, setDemo] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const confirmLeave = useConfirmLeave();
 
   const current = ALL_NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
   const forbidden = Boolean(current?.adminOnly && !isAdmin);
@@ -141,8 +143,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => { setNavOpen(false); setMenu(null); }, [pathname]);
 
-  async function goToCompany(companyId: string | null) {
+  function goToCompany(companyId: string | null) {
     setMenu(null);
+    confirmLeave(() => { void switchTo(companyId); });
+  }
+
+  async function switchTo(companyId: string | null) {
     try {
       const session = await switchCompany(companyId);
       router.push(session.company ? '/painel' : '/master');
@@ -154,7 +160,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   function signOut() {
     setMenu(null);
-    setConfirmingLogout(true);
+    confirmLeave(() => setConfirmingLogout(true));
   }
 
   if (status !== 'authenticated' || !company || !user || forbidden) return <Loading />;

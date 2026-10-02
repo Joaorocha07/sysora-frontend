@@ -6,6 +6,7 @@ import { Bell, Bot, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Sav
 import { useShell } from '@/components/AppShell';
 import { BotFlowEditor } from '@/components/BotFlowEditor';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
+import { useConfirmLeave, useUnsavedChanges } from '@/components/UnsavedChanges';
 import { errorMessage, settingsApi, whatsappApi, type BotAiStatus, type Settings, type WhatsAppStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { duration } from '@/lib/format';
@@ -166,13 +167,17 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
     whatsappApi.ai().then(setAi).catch(() => {});
   }, [toast]);
 
+  const dirty = Boolean(draft && saved) && JSON.stringify(draft) !== JSON.stringify(saved);
+  // Salvar pelo aviso de "alterações não salvas" (ao sair da aba ou da página).
+  const saveRef = useRef<() => Promise<boolean>>(async () => true);
+  useUnsavedChanges(dirty, () => saveRef.current());
+
   if (!draft || !saved) return <Loading />;
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d));
   const text = (key: keyof Settings) => ({ value: String(draft[key] ?? ''), onChange: (e: { target: { value: string } }) => set(key, e.target.value as never) });
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
-  async function save() {
-    if (!draft || !saved) return;
+  async function save(): Promise<boolean> {
+    if (!draft || !saved) return false;
     const changes = Object.fromEntries(Object.entries(draft).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(saved[k as keyof Settings])));
     setBusy(true);
     try {
@@ -180,12 +185,15 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
       setSaved(next);
       setDraft(next);
       toast('Configurações salvas.');
+      return true;
     } catch (err) {
       toast(errorMessage(err), true);
+      return false;
     } finally {
       setBusy(false);
     }
   }
+  saveRef.current = save;
 
   return (
     <div className="card">
@@ -271,6 +279,9 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
 export default function WhatsAppPage() {
   const { company } = useAuth();
   const [tab, setTab] = useState<Tab>('conexao');
+  const confirmLeave = useConfirmLeave();
+  // Trocar de aba descarta o rascunho da aba atual: pergunta antes, se houver.
+  const openTab = (next: Tab) => { if (next !== tab) confirmLeave(() => setTab(next)); };
 
   return (
     <>
@@ -281,10 +292,10 @@ export default function WhatsAppPage() {
       />
       <div className="tabs">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" className={tab === id ? 'on' : ''} onClick={() => setTab(id)}><Icon size={15} style={{ verticalAlign: -3, marginRight: 6 }} />{label}</button>
+          <button key={id} type="button" className={tab === id ? 'on' : ''} onClick={() => openTab(id)}><Icon size={15} style={{ verticalAlign: -3, marginRight: 6 }} />{label}</button>
         ))}
       </div>
-      {tab === 'conexao' ? <Connection /> : tab === 'fluxo' ? <BotFlowEditor /> : <BotSettings key={tab} tab={tab} onOpenFlow={() => setTab('fluxo')} />}
+      {tab === 'conexao' ? <Connection /> : tab === 'fluxo' ? <BotFlowEditor /> : <BotSettings key={tab} tab={tab} onOpenFlow={() => openTab('fluxo')} />}
       {tab !== 'conexao' && (
         <p className="hint" style={{ marginTop: 14 }}><MessageSquareText size={13} style={{ verticalAlign: -2 }} /> Os horários de atendimento que o bot oferece ficam em Configurações → Horários.</p>
       )}

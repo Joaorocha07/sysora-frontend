@@ -7,6 +7,7 @@ import {
   Sparkles, Tag, Trash2, TriangleAlert, Undo2, Zap,
 } from 'lucide-react';
 import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui';
+import { useUnsavedChanges } from '@/components/UnsavedChanges';
 import {
   errorMessage, servicesApi, settingsApi, whatsappApi,
   type FlowAction, type FlowNode, type FlowNodeType, type Service, type Settings, type SoraMessage, type SoraUsage,
@@ -148,8 +149,12 @@ export function BotFlowEditor() {
 
   const vars = useMemo<Vars>(() => ({ nome: 'Maria', empresa: company?.name ?? 'Sua empresa' }), [company?.name]);
 
+  const dirty = Boolean(flow && saved) && JSON.stringify(flow) !== JSON.stringify(saved);
+  // Inclui o rascunho da Sora: sair sem salvar pede confirmação (UnsavedChanges).
+  const saveRef = useRef<() => Promise<boolean>>(async () => true);
+  useUnsavedChanges(dirty, () => saveRef.current());
+
   if (!flow || !saved) return <Loading />;
-  const dirty = JSON.stringify(flow) !== JSON.stringify(saved);
   const problems = allProblems(flow);
   const editTarget = editing ? findWithParent(flow, editing) : null;
 
@@ -159,23 +164,26 @@ export function BotFlowEditor() {
     setEditing(id);
   }
 
-  async function save() {
-    if (!flow) return;
+  async function save(): Promise<boolean> {
+    if (!flow) return false;
     if (problems.length) {
       toast(`${problems[0].label}: ${problems[0].problem}`, true);
-      return;
+      return false;
     }
     setBusy(true);
     try {
       const r = await whatsappApi.saveFlow(clean(flow));
       setSaved(r.flow); setFlow(r.flow); setCustom(r.custom);
       toast('Fluxo salvo. O bot já está usando a nova versão.');
+      return true;
     } catch (err) {
       toast(errorMessage(err), true);
+      return false;
     } finally {
       setBusy(false);
     }
   }
+  saveRef.current = save;
 
   async function reset() {
     setBusy(true);

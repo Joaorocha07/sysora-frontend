@@ -14,6 +14,14 @@ export const startOfWeek = (iso: string) => {
   const d = new Date(`${iso}T12:00:00`);
   return addDays(iso, -((d.getDay() + 6) % 7));
 };
+export const startOfMonth = (iso: string) => `${iso.slice(0, 7)}-01`;
+// Primeiro dia do mês deslocado em `months` meses.
+export const addMonths = (iso: string, months: number) => {
+  const d = new Date(`${startOfMonth(iso)}T12:00:00`);
+  d.setMonth(d.getMonth() + months);
+  return toIsoDate(d);
+};
+export const endOfMonth = (iso: string) => addDays(addMonths(iso, 1), -1);
 
 export const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 export const WEEKDAYS_LONG = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];

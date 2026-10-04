@@ -4,16 +4,16 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle, ArrowUpRight, Building2, CalendarDays, ChevronDown, CreditCard, Eye, LayoutDashboard, LogOut, Menu, MessageCircle, QrCode,
-  Settings, ShieldCheck, Sparkles, Users, UserCog, Wrench, X,
+  AlertTriangle, ArrowUpRight, Building2, CalendarDays, ChevronDown, ClipboardList, CreditCard, Eye, LayoutDashboard, LogOut, Menu, MessageCircle, QrCode,
+  Settings, ShieldCheck, Sparkles, Tags, Users, UserCog, X,
 } from 'lucide-react';
 import Logo from './Logo';
 import LogoutDialog from './LogoutDialog';
 import ThemeToggle from './ThemeToggle';
 import { useConfirmLeave } from './UnsavedChanges';
-import { Avatar, Loading, useToast } from './ui';
+import { Avatar, Loading, Modal, useToast } from './ui';
 import {
-  authApi, conversationsApi, errorMessage, subscribeNotice, subscribeSubscriptionBlocked, usersApi, whatsappApi, type CompanyChoice, type Subscription,
+  authApi, conversationsApi, errorMessage, subscribeNotice, subscribeSubscriptionBlocked, surveyApi, usersApi, whatsappApi, type CompanyChoice, type Subscription,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { demoMode } from '@/lib/demo';
@@ -65,7 +65,7 @@ const MAIN_NAV: NavItem[] = [
   { href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/conversas', label: 'Conversas', icon: MessageCircle },
-  { href: '/servicos', label: 'Serviços', icon: Wrench },
+  { href: '/servicos', label: 'Catálogo', icon: Tags },
 ];
 const ADMIN_NAV: NavItem[] = [
   { href: '/whatsapp', label: 'WhatsApp', icon: QrCode, adminOnly: true },
@@ -95,6 +95,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
   const [demo, setDemo] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  // Convite da pesquisa inicial: aparece uma vez, no login (depois, só o aviso no painel).
+  const [surveyInvite, setSurveyInvite] = useState(false);
   const confirmLeave = useConfirmLeave();
 
   const current = ALL_NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
@@ -126,6 +128,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
     });
     return () => subscribeNotice(null);
   }, [toast, router]);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !company || pathname === '/pesquisa') return;
+    surveyApi.status().then((r) => setSurveyInvite(r.eligible && r.status === 'pending')).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, company?.id]);
+
+  // Fechar o convite (agora ou depois) conta como visto: daqui em diante só o aviso no painel.
+  const closeSurveyInvite = (answer: boolean) => {
+    setSurveyInvite(false);
+    surveyApi.dismiss().catch(() => {});
+    if (answer) router.push('/pesquisa');
+  };
 
   const refreshBadges = useCallback(() => {
     conversationsApi.list().then((list) => setUnread(list.reduce((sum, c) => sum + c.unreadCount, 0))).catch(() => {});
@@ -199,7 +214,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <div className="wa-card">
                 <span className="wa-icon"><MessageCircle size={17} /></span>
                 <strong>Conecte o WhatsApp</strong>
-                <p>Leia o QR Code e deixe o bot atender, cadastrar e agendar por você.</p>
+                <p>Conecte o número pelo WhatsApp oficial e deixe o bot atender, cadastrar e agendar por você.</p>
                 <Link href="/whatsapp">Conectar agora <ArrowUpRight size={14} /></Link>
               </div>
             )}
@@ -303,6 +318,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
       {confirmingLogout && <LogoutDialog onClose={() => setConfirmingLogout(false)} />}
+      {surveyInvite && (
+        <Modal
+          title="Nos ajude a deixar a Sysora com a cara do seu negócio"
+          onClose={() => closeSurveyInvite(false)}
+          footer={<>
+            <button type="button" className="btn btn-ghost" onClick={() => closeSurveyInvite(false)}>Responder depois</button>
+            <button type="button" className="btn btn-primary" onClick={() => closeSurveyInvite(true)}>Responder agora</button>
+          </>}
+        >
+          <div className="row" style={{ alignItems: 'flex-start', gap: 14 }}>
+            <span className="metric-icon" style={{ flex: 'none' }}><ClipboardList size={18} /></span>
+            <p style={{ lineHeight: 1.6 }}>
+              {firstName(user?.name ?? '') ? `${firstName(user?.name ?? '')}, queremos` : 'Queremos'} entender melhor como a sua empresa funciona para trazer recursos que façam diferença no seu dia a dia.
+              {' '}São <strong>4 perguntas rápidas</strong>, de marcar: leva menos de 3 minutos.
+            </p>
+          </div>
+        </Modal>
+      )}
     </ShellContext.Provider>
   );
 }

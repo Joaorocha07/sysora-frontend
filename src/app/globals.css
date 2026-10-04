@@ -434,6 +434,21 @@ small { font-size: 12px; color: var(--muted); }
 .company-choice { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface); text-align: left; }
 .company-choice:hover { border-color: var(--ink); }
 .company-choice svg:last-child { margin-left: auto; color: var(--muted); }
+/* Celular: espaço no topo para o conteúdo não ficar embaixo do botão de tema fixo. */
+@media (max-width: 960px) { .auth-main { padding-top: 76px; align-items: start; } }
+/* Pesquisa inicial (/pesquisa), no layout do login. */
+.auth-card.survey { width: min(520px, 100%); }
+.survey-progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.survey-progress div { height: 100%; border-radius: 999px; background: var(--primary); transition: width .3s ease; }
+.survey-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.survey-options .chip { height: auto; min-height: 42px; padding: 10px 16px; line-height: 1.3; text-align: left; white-space: normal; }
+.survey-options.single { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.survey-options.single .chip { justify-content: flex-start; border-radius: var(--radius-sm); }
+@media (max-width: 480px) { .survey-options.single { grid-template-columns: 1fr; } }
+.survey-invite { display: flex; align-items: center; gap: 14px; padding: 16px 18px; margin-bottom: 20px; }
+.survey-invite > svg { flex: none; }
+.survey-invite > div { flex: 1; min-width: 0; }
+@media (max-width: 640px) { .survey-invite { flex-wrap: wrap; } .survey-invite .btn { width: 100%; } }
 .auth-or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: -4px 0; }
 .auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .google-connected { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface); font-size: 14px; }
@@ -664,17 +679,60 @@ button.price-card.selected { box-shadow: 0 0 0 2px var(--ink); }
 .sora-input .textarea { flex: 1; min-height: 44px; max-height: 140px; }
 .flow-msg-row { display: flex; gap: 6px; align-items: flex-start; }
 .flow-msg-row .textarea { flex: 1; min-height: 72px; }
-@media (max-width: 1100px) {
+/* Sugestões e atalhos com texto longo: quebram linha em vez de vazar do botão. */
+.sora-ideas .chip, .flow-sim .chips .chip { height: auto; min-height: 36px; padding: 8px 14px; line-height: 1.35; text-align: left; white-space: normal; }
+.sora-head { flex-wrap: wrap; }
+/* Barra de salvar que acompanha a rolagem enquanto há alterações no fluxo. */
+.flow-savebar {
+  position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end;
+  padding: 10px 12px 10px 18px; border-radius: var(--pill); border: 1px solid var(--line-strong);
+  background: var(--surface); box-shadow: var(--shadow-lg);
+}
+.flow-savebar > span { margin-right: auto; font-size: 13px; font-weight: 600; }
+/* Notebooks (~1280–1500px): cartões mais estreitos para a árvore caber ao lado do simulador. */
+@media (max-width: 1500px) {
+  .flow-canvas { padding: 20px; }
+  .flow-card { width: 210px; }
+  .flow-children { padding-left: 40px; }
+  .flow-children::before { width: 20px; }
+  .flow-child::before { left: -20px; width: 20px; }
+  .flow-child::after { left: -20px; }
+  .flow-data-link { padding-left: 44px; }
+  .flow-data-link::before { width: 30px; }
+  .flow-data-link::after { left: 32px; }
+  .flow-data { width: 190px; }
+}
+/* Notebooks menores e tablets: o simulador vai para baixo do fluxograma. */
+@media (max-width: 1360px) {
   .flow-layout { grid-template-columns: 1fr; }
-  .flow-sim { position: static; }
+  .flow-sim { position: static; max-width: 640px; }
 }
 @media (max-width: 640px) {
   .flow-editor, .flow-type-pick { grid-template-columns: 1fr; }
-  .flow-card { width: 200px; }
-  .flow-children { padding-left: 36px; }
-  .flow-children::before { width: 18px; }
-  .flow-child::before { left: -18px; width: 18px; }
-  .flow-child::after { left: -18px; }
+  /* Fluxograma vira lista vertical com recuo: cada opção embaixo do menu dela. */
+  .flow-canvas { padding: 14px; overflow: visible; }
+  .flow-branch { flex-direction: column; align-items: stretch; width: 100%; }
+  .flow-card { width: 100%; }
+  .flow-children { padding-left: 14px; margin: 10px 0 0 10px; border-left: 2px solid var(--line-strong); }
+  .flow-children::before, .flow-child::before, .flow-child::after, .flow-data-link::before, .flow-data-link::after { display: none; }
+  .flow-child { padding: 6px 0; }
+  .flow-add { margin-top: 4px; width: 100%; justify-content: center; }
+  .flow-data-link { padding: 8px 0 0 12px; }
+  .flow-data { width: 100%; }
+  .flow-sim-chat { height: 360px; }
+  .sora-ideas { display: grid; }
+  .sora-input .textarea { min-height: 72px; }
+  .flow-savebar { border-radius: var(--radius); padding: 10px 12px; }
+  .flow-savebar > span { width: 100%; }
+  .flow-savebar .btn { flex: 1; }
+  /* Seletores (manual/Sora, filtros, mês/semana/dia) ocupam a largura toda, com botões iguais. */
+  .segmented { width: 100% !important; }
+  .segmented button { flex: 1; padding: 0 10px; }
+  /* Abas numa linha só, com rolagem lateral. */
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -16px; margin-right: -16px; padding: 0 16px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: none; padding: 0 14px; }
 }
 
 /* ============ Recursos do plano Avançado (IA) ============ */

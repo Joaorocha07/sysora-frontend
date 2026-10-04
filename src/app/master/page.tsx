@@ -84,7 +84,7 @@ function NewCompanyModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           <Field label="Nome"><input className="input" required minLength={2} value={form.adminName} onChange={set('adminName')} /></Field>
           <Field label="E-mail de acesso"><input className="input" type="email" required value={form.adminEmail} onChange={set('adminEmail')} /></Field>
         </div>
-        <Field label="Senha inicial" hint="Mínimo de 8 caracteres. Se o e-mail já tiver conta no Sysora, a senha atual dele é mantida.">
+        <Field label="Senha inicial" hint="Mínimo de 8 caracteres. Se o e-mail já tiver conta na Sysora, a senha atual dele é mantida.">
           <input className="input" type="password" required minLength={8} autoComplete="new-password" value={form.adminPassword} onChange={set('adminPassword')} />
         </Field>
       </form>
@@ -220,7 +220,7 @@ export default function MasterPage() {
       <PageHead
         eyebrow="Painel master"
         title="Empresas e assinaturas"
-        text="Acompanhe os clientes do Sysora, registre pagamentos e acesse qualquer empresa para dar suporte."
+        text="Acompanhe os clientes da Sysora, registre pagamentos e acesse qualquer empresa para dar suporte."
         actions={<button type="button" className="btn btn-primary" onClick={() => setCreating(true)}><Plus size={16} />Nova empresa</button>}
       />
 

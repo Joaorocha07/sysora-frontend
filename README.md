@@ -1,6 +1,6 @@
 # Sysora — Frontend
 
-Interface do Sysora em Next.js 15 (App Router), React 19 e TypeScript, com ícones Lucide e CSS próprio (`src/app/globals.css`). A identidade é só preto e branco, com componentes arredondados, fontes DM Sans e Manrope, e tema claro e escuro.
+Interface da Sysora em Next.js 15 (App Router), React 19 e TypeScript, com ícones Lucide e CSS próprio (`src/app/globals.css`). A identidade é só preto e branco, com componentes arredondados, fontes DM Sans e Manrope, e tema claro e escuro.
 
 ## Rodando
 

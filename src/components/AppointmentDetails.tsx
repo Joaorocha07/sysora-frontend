@@ -88,7 +88,7 @@ export default function AppointmentDetails({ appointment, onClose, onChanged }: 
           </Link>
           <div className="divider" />
           {current.items.map((i) => (
-            <div key={i.id} className="row"><span>{i.name}</span><div className="spacer" /><small>{duration(i.durationMinutes)}</small><strong className="mono">{money(i.priceCents)}</strong></div>
+            <div key={i.id} className="row"><span>{i.name}</span><div className="spacer" /><small>{i.kind === 'PRODUCT' ? 'Produto' : duration(i.durationMinutes)}</small><strong className="mono">{money(i.priceCents)}</strong></div>
           ))}
           <div className="divider" />
           <div className="row"><strong>Total</strong><div className="spacer" /><small>{duration(minutes)}</small><strong className="mono">{money(current.totalCents)}</strong></div>

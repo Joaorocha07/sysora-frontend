@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { startDemo, type DemoMode } from './demo';
 import { authApi, subscribeSession, type LoginResponse, type RegisterCompanyInput, type Subscription, type AuthCompany, type AuthUser, type CompanyChoice, type Role, type Session } from './api';
 import type { GoogleSignup } from './supabase';
@@ -108,6 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const reloadSession = useCallback(async () => {
     try { apply(await authApi.refresh()); } catch { /* mantém a sessão atual */ }
   }, [apply]);
+
+  // Plano, papel e empresa podem mudar com a aba aberta (pagamento em outra aba,
+  // admin master mudando o plano): ao voltar para a aba, busca a sessão de novo
+  // (no máximo uma vez por minuto).
+  const lastReload = useRef(Date.now());
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastReload.current < 60_000) return;
+      lastReload.current = Date.now();
+      void reloadSession();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [status, reloadSession]);
 
   const logout = useCallback(async () => {
     try { await authApi.logout(); } catch { /* encerra a sessão local mesmo se falhar */ }

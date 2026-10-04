@@ -39,7 +39,7 @@ const TYPES: Record<FlowNodeType, { label: string; hint: string; icon: typeof Za
 const ACTIONS: Record<FlowAction, { label: string; flow: string; sample: string }> = {
   agendar: { label: 'Agendar um horário', flow: 'Serviço → dia → horário → agendado', sample: 'Qual serviço você deseja? Responda com o número:\n\n1) Corte\n2) Escova\n…' },
   meus: { label: 'Meus agendamentos', flow: 'Confirmar, remarcar ou cancelar', sample: 'Seu próximo horário: Corte na sexta, 10/10 às 14:00.\n\n1) Confirmar presença\n2) Remarcar\n3) Cancelar' },
-  servicos: { label: 'Serviços e valores', flow: 'Lista serviços com preços', sample: 'Nossos serviços:\n\n• Corte: R$ 50,00 (30 min)\n…' },
+  servicos: { label: 'Serviços e valores', flow: 'Lista serviços e produtos com preços', sample: 'Nossos serviços:\n\n• Corte: R$ 50,00 (30 min)\n…' },
   equipe: { label: 'Falar com a equipe', flow: 'Bot pausa e a equipe assume', sample: '(mensagem de transferência da aba Atendimento humano)' },
 };
 
@@ -250,6 +250,14 @@ export function BotFlowEditor() {
         <Simulator key={JSON.stringify(flow)} root={flow} vars={vars} ai={ai} />
       </div>
 
+      {dirty && (
+        <div className="flow-savebar">
+          <span>{problems.length ? `Falta ajustar: ${problems[0].label}` : 'Alterações não salvas'}</span>
+          <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => setFlow(saved)}>Descartar</button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={save}>{busy ? <span className="spinner" /> : <Save size={14} />}Salvar fluxo</button>
+        </div>
+      )}
+
       {editTarget && (
         <NodeEditor
           root={flow}
@@ -355,7 +363,9 @@ function FlowCard({ node, index, isRoot, onEdit }: { node: FlowNode; index: numb
 
 // Resumo curto dos dados reais que a função usa, ao lado da caixa (pela seta).
 function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
-  const { services, settings } = data;
+  const { settings } = data;
+  // Agendar só oferece serviços; a lista de valores mostra também os produtos.
+  const services = action === 'agendar' ? data.services.filter((s) => s.kind !== 'PRODUCT') : data.services;
   const firstServices = services.slice(0, 3);
   const more = services.length - firstServices.length;
   const hours = settings && (
@@ -382,7 +392,7 @@ function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
             </ul>
           </>
         )}
-        <span><Link href="/servicos">Serviços</Link> · <Link href="/configuracoes?aba=horarios">Horários</Link></span>
+        <span><Link href="/servicos">Catálogo</Link> · <Link href="/configuracoes?aba=horarios">Horários</Link></span>
       </div>
     );
   }
@@ -396,7 +406,7 @@ function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
             {more > 0 && <li><span>+{more} serviço{more > 1 ? 's' : ''}</span><span /></li>}
           </ul>
         ) : noServices}
-        <Link href="/servicos">Editar serviços e preços</Link>
+        <Link href="/servicos">Editar catálogo e preços</Link>
       </div>
     );
   }
@@ -652,93 +662,97 @@ function NodeEditor({ root, node, parent, depth, vars, onClose, onApply, onRemov
   );
 }
 
-// Testa o fluxo clicando nas opções, como se fosse o cliente. Também dá para
-// escrever do jeito do cliente: a IA do atendimento (backend) diz o que entendeu.
+// "Testar conversa" com o bot de verdade (POST /whatsapp/simulate): mesmo
+// motor do WhatsApp, com o fluxo desta tela (mesmo sem salvar), o catálogo e os
+// horários livres reais da agenda. Nada é salvo e nenhuma mensagem é enviada.
+type SimTurn = { own?: string; bubbles: Bubble[] };
+
+// Opções numeradas da última mensagem do bot, para responder com um toque.
+function quickReplies(text: string): { value: string; label: string }[] {
+  return [...text.matchAll(/^(\d{1,2})\) (.+)$/gm)].map((m) => ({ value: m[1], label: `${m[1]}) ${m[2]}` }));
+}
+
 function Simulator({ root, vars, ai }: { root: FlowNode; vars: Vars; ai: boolean }) {
-  const toast = useToast();
-  const start = () => bubblesOf(root, root, null, vars);
-  const [chat, setChat] = useState<{ bubbles: Bubble[]; own?: string }[]>(() => [{ bubbles: start().bubbles }]);
-  const [menu, setMenu] = useState<FlowNode | null>(root);
+  const [simId, setSimId] = useState<string | null>(null);
+  const [chat, setChat] = useState<SimTurn[]>([]);
   const [typed, setTyped] = useState('');
-  const [thinking, setThinking] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [handoff, setHandoff] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
 
-  function choose(option: FlowNode, index: number, own = String(index + 1), note?: string) {
-    if (!menu) return;
-    const result = bubblesOf(root, option, menu, vars);
-    setChat((c) => [...c, { own, bubbles: [...(note ? [{ text: note, system: true }] : []), ...result.bubbles] }]);
-    setMenu(result.menu);
-  }
+  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight }); }, [chat, sending]);
 
-  async function sendTyped(e: FormEvent) {
-    e.preventDefault();
-    const text = typed.trim();
-    if (!text || !menu || thinking) return;
-    const options = menu.options ?? [];
-    const byNumber = /^\d$/.test(text) ? options[Number(text) - 1] : undefined;
-    if (byNumber) { setTyped(''); choose(byNumber, Number(text) - 1); return; }
-    if (text === '0' && menu.id !== root.id) { setTyped(''); back(); return; }
-
-    setThinking(true);
+  async function send(text: string) {
+    const message = text.trim();
+    if (!message || sending) return;
+    setTyped('');
+    setSending(true);
+    setChat((c) => [...c, { own: message, bubbles: [] }]);
     try {
-      const r = await whatsappApi.understand(clean(root), text, menu.id === root.id ? undefined : menu.id);
-      setTyped('');
-      const option = options.find((o) => o.id === r.optionId);
-      const details = [r.services.length && `serviço: ${r.services.join(' + ')}`, r.date && `dia: ${r.date.split('-').reverse().join('/')}`, r.time && `horário: ${r.time}`].filter(Boolean);
-      if (option) {
-        const note = `IA entendeu: “${option.label}”${details.length ? ` (${details.join(', ')})` : ''}.${details.length && option.action === 'agendar' ? ' No WhatsApp o bot já usa esses dados e agenda direto se o horário estiver livre.' : ''}`;
-        choose(option, options.indexOf(option), text, note);
-      } else {
-        const reply = r.answer ? `${r.answer}\n\n${menuText(menu, menu.id === root.id, vars)}` : `Não entendi.\n\n${menuText(menu, menu.id === root.id, vars)}`;
-        setChat((c) => [...c, { own: text, bubbles: [{ text: reply }] }]);
+      const r = await whatsappApi.simulate({ simId, text: message, flow: clean(root), profileName: vars.nome });
+      setSimId(r.simId);
+      const bubbles: Bubble[] = r.inactive
+        ? [{ text: 'A assinatura da empresa não está ativa: no WhatsApp, o bot não responde os clientes.', system: true }]
+        : r.replies.length
+          ? r.replies.map((t) => ({ text: t }))
+          : [{ text: 'O bot não respondeu (no WhatsApp ele ficaria em silêncio).', system: true }];
+      const human = r.step === 'HUMAN';
+      if (human && !handoff) {
+        bubbles.push({ text: 'Conversa passada para a equipe. No WhatsApp, o bot fica em silêncio até alguém responder em Conversas ou o tempo de atendimento humano acabar.', system: true });
       }
+      setHandoff(human);
+      setChat((c) => [...c.slice(0, -1), { own: message, bubbles }]);
     } catch (err) {
-      toast(errorMessage(err), true);
+      setChat((c) => [...c.slice(0, -1), { own: message, bubbles: [{ text: errorMessage(err), system: true }] }]);
     } finally {
-      setThinking(false);
+      setSending(false);
     }
   }
 
-  function back() {
-    setChat((c) => [...c, { own: '0', bubbles: [{ text: menuText(root, true, vars) }] }]);
-    setMenu(root);
+  function restart() {
+    setSimId(null);
+    setChat([]);
+    setHandoff(false);
   }
 
-  function restart() {
-    setChat([{ bubbles: start().bubbles }]);
-    setMenu(root);
-  }
+  const last = [...chat].reverse().find((t) => t.bubbles.some((b) => !b.system));
+  const lastText = last?.bubbles.filter((b) => !b.system).map((b) => b.text).join('\n') ?? '';
+  const chips = handoff ? [] : quickReplies(lastText);
 
   return (
     <div className="card flow-sim">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <strong><Play size={14} style={{ verticalAlign: -2 }} /> Testar conversa</strong>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={restart}><RotateCcw size={13} />Recomeçar</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={restart} disabled={sending}><RotateCcw size={13} />Recomeçar</button>
       </div>
-      <div className="phone-preview flow-sim-chat">
+      <small className="muted">É o bot de verdade, com este fluxo, o catálogo e a agenda. Nada é salvo e nenhuma mensagem é enviada.</small>
+      <div className="phone-preview flow-sim-chat" ref={chatRef}>
+        {!chat.length && <div className="flow-system">Mande uma mensagem como se fosse o cliente (ex.: “oi”).</div>}
         {chat.map((turn, i) => (
           <div key={i} style={{ display: 'contents' }}>
             {turn.own && <div className="bubble own">{turn.own}</div>}
             {turn.bubbles.map((b, j) => <div key={j} className={b.system ? 'flow-system' : 'bubble'}>{b.text}</div>)}
           </div>
         ))}
+        {sending && <div className="bubble" style={{ opacity: 0.7 }}><span className="spinner" style={{ width: 12, height: 12, marginRight: 6, verticalAlign: -2 }} />digitando...</div>}
       </div>
       <div className="chips">
-        {menu ? (
-          <>
-            {(menu.options ?? []).map((o, i) => <button key={o.id} type="button" className="chip" onClick={() => choose(o, i)}>{i + 1}) {fill(o.label || '…', vars)}</button>)}
-            {menu.id !== root.id && <button type="button" className="chip" onClick={back}>0) Voltar</button>}
-          </>
-        ) : (
-          <button type="button" className="chip" onClick={restart}>Nova conversa</button>
-        )}
+        {!chat.length && <button type="button" className="chip" onClick={() => void send('oi')} disabled={sending}>oi</button>}
+        {chips.map((c) => <button key={c.value} type="button" className="chip" onClick={() => void send(c.value)} disabled={sending}>{c.label}</button>)}
+        {handoff && <button type="button" className="chip" onClick={restart}>Nova conversa</button>}
       </div>
-      {menu && !ai && <AiPlanNotice compact feature="Testar mensagens escritas como o cliente (IA)" />}
-      {menu && ai && (
-        <form className="flow-sim-input" onSubmit={sendTyped}>
-          <input className="input" maxLength={600} value={typed} placeholder="Ou escreva como o cliente: “queria marcar um corte”" onChange={(e) => setTyped(e.target.value)} disabled={thinking} />
-          <button type="submit" className="icon-btn bordered" title="Enviar" disabled={!typed.trim() || thinking}>{thinking ? <span className="spinner" /> : <Send size={15} />}</button>
-        </form>
-      )}
+      <form className="flow-sim-input" onSubmit={(e: FormEvent) => { e.preventDefault(); void send(typed); }}>
+        <input
+          className="input"
+          maxLength={600}
+          value={typed}
+          placeholder={ai ? 'Escreva como o cliente: “queria marcar um corte amanhã”' : 'Escreva como o cliente (número da opção ou palavra)'}
+          onChange={(e) => setTyped(e.target.value)}
+          disabled={sending}
+        />
+        <button type="submit" className="icon-btn bordered" title="Enviar" disabled={!typed.trim() || sending}>{sending ? <span className="spinner" /> : <Send size={15} />}</button>
+      </form>
+      {!ai && <AiPlanNotice compact feature="Entender mensagens escritas do jeito do cliente (IA)" />}
     </div>
   );
 }

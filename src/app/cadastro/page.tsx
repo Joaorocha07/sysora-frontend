@@ -77,7 +77,7 @@ function CompanyForm({ initialPlan, google, onDropGoogle }: { initialPlan: PlanI
   }
 
   if (open === false) {
-    return <FormError message="O cadastro de novas empresas está fechado no momento. Fale com a equipe do Sysora." />;
+    return <FormError message="O cadastro de novas empresas está fechado no momento. Fale com a equipe da Sysora." />;
   }
 
   return (
@@ -114,7 +114,7 @@ function CompanyForm({ initialPlan, google, onDropGoogle }: { initialPlan: PlanI
       )}
       <label className="row" style={{ alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
         <input type="checkbox" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} style={{ marginTop: 3 }} />
-        <span className="muted">Li e aceito os termos de uso e a política de privacidade do Sysora.</span>
+        <span className="muted">Li e aceito os termos de uso e a política de privacidade da Sysora.</span>
       </label>
       <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
         {busy ? <span className="spinner" /> : <>Começar teste grátis <ArrowRight size={17} /></>}
@@ -193,7 +193,7 @@ function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: stri
       </div>
       {google ? <GoogleAccount google={google} onDropGoogle={onDropGoogle} /> : (
         <>
-          <Field label="E-mail" hint="Já tem conta no Sysora em outra empresa? Use o mesmo e-mail e a mesma senha.">
+          <Field label="E-mail" hint="Já tem conta na Sysora em outra empresa? Use o mesmo e-mail e a mesma senha.">
             <div className="input-icon"><Mail size={17} /><input className="input" type="email" required autoComplete="email" value={form.email} onChange={(e) => set('email')(e.target.value)} /></div>
           </Field>
           <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />

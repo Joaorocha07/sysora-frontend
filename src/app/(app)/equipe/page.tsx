@@ -38,7 +38,7 @@ function MemberModal({ member, onClose, onSaved }: { member?: Member | null; onC
   return (
     <Modal
       title={member ? 'Editar usuário' : 'Novo usuário'}
-      description={member ? member.email : 'A pessoa entra no Sysora com este e-mail e a senha definida aqui.'}
+      description={member ? member.email : 'A pessoa entra na Sysora com este e-mail e a senha definida aqui.'}
       onClose={onClose}
       footer={<>
         <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>

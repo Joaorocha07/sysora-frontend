@@ -8,7 +8,8 @@ import { BotFlowEditor } from '@/components/BotFlowEditor';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
 import { useConfirmLeave, useUnsavedChanges } from '@/components/UnsavedChanges';
 import { AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
-import { errorMessage, settingsApi, whatsappApi, type BotAiStatus, type Settings, type WhatsAppStatus } from '@/lib/api';
+import { OfficialConnect, OfficialConnected, formatWaPhone } from '@/components/WhatsAppOfficial';
+import { errorMessage, settingsApi, whatsappApi, type BotAiStatus, type Settings, type WhatsAppCloudConfig, type WhatsAppStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { duration } from '@/lib/format';
 
@@ -24,13 +25,6 @@ const TABS: { id: Tab; label: string; icon: typeof Bot }[] = [
 
 const VARS = '{nome}, {empresa}, {servico}, {data} e {hora}';
 
-function formatWaPhone(phone: string | null) {
-  if (!phone) return '';
-  const d = phone.replace(/\D/g, '');
-  if (d.startsWith('55') && d.length >= 12) return `+55 (${d.slice(2, 4)}) ${d.slice(4, -4)}-${d.slice(-4)}`;
-  return `+${d}`;
-}
-
 function Connection() {
   const toast = useToast();
   const { refreshBadges } = useShell();
@@ -39,6 +33,10 @@ function Connection() {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [testTo, setTestTo] = useState('');
   const previous = useRef<WhatsAppStatus['status'] | null>(null);
+  // App da Meta da Sysora configurado (painel master → WhatsApp oficial)? Sem ele, só o QR Code.
+  const [cloudConfig, setCloudConfig] = useState<WhatsAppCloudConfig | null>(null);
+
+  useEffect(() => { whatsappApi.cloudConfig().then(setCloudConfig).catch(() => {}); }, []);
 
   const load = useCallback(() => whatsappApi.status().then(setState).catch(() => {}), []);
 
@@ -85,10 +83,16 @@ function Connection() {
 
   if (!state) return <Loading />;
   const connected = state.status === 'connected';
+  const official = state.provider === 'cloud' && state.cloud;
+  // Nada conectado e a API oficial liberada: oferece ela primeiro e o QR Code como alternativa.
+  const choosing = !state.provider && state.status === 'disconnected' && Boolean(cloudConfig?.enabled);
 
   return (
     <div className="stack">
-      <div className="card card-pad">
+      {official && <OfficialConnected state={state} onChange={setState} onDisconnect={() => setConfirmDisconnect(true)} busy={busy} />}
+      {choosing && cloudConfig && <OfficialConnect config={cloudConfig} onConnected={setState} />}
+      {choosing && <div className="eyebrow" style={{ marginTop: 8 }}>Ou conecte pelo QR Code (WhatsApp Web)</div>}
+      {!official && <div className="card card-pad">
         <div className="qr-box">
           <div className="qr-frame">
             {state.status === 'qr' && state.qr ? (
@@ -134,17 +138,22 @@ function Connection() {
                   </button>
                   {state.status !== 'disconnected' && <button type="button" className="btn btn-ghost" onClick={() => setConfirmDisconnect(true)}>Cancelar</button>}
                 </div>
-                <p className="hint">Funciona como o WhatsApp Web: a sessão fica salva e reconecta sozinha se o servidor reiniciar.</p>
+                <p className="hint">
+                  Funciona como o WhatsApp Web: a sessão fica salva e reconecta sozinha se o servidor reiniciar.
+                  {choosing ? ' Não é uma conexão oficial da Meta: o WhatsApp pode restringir números conectados assim.' : ''}
+                </p>
               </>
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
       {confirmDisconnect && (
         <ConfirmDialog
           title="Desconectar o WhatsApp?"
-          message="O bot para de atender e os lembretes deixam de ser enviados. Para voltar, será preciso ler um novo QR Code."
+          message={official
+            ? 'O bot para de atender por este número e os lembretes deixam de ser enviados. O número e a conta continuam seus no WhatsApp Manager; para voltar, é só conectar de novo.'
+            : 'O bot para de atender e os lembretes deixam de ser enviados. Para voltar, será preciso ler um novo QR Code.'}
           confirmLabel="Desconectar"
           danger
           busy={busy}
@@ -261,7 +270,7 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
         {tab === 'equipe' && (
           <>
             <Field label="Transferência para a equipe" hint="Quando o cliente escolhe “Falar com a equipe”. O bot fica em silêncio até alguém responder."><textarea className="textarea" {...text('handoffMessage')} /></Field>
-            <Switch checked={draft.pauseOnStaffReply} onChange={(v) => set('pauseOnStaffReply', v)} label="Pausar o bot quando a equipe responder" description="Vale para respostas pelo Sysora e pelo celular." />
+            <Switch checked={draft.pauseOnStaffReply} onChange={(v) => set('pauseOnStaffReply', v)} label="Pausar o bot quando a equipe responder" description="Vale para respostas pela Sysora e pelo celular." />
             <Field label="Encerrar o atendimento humano após" hint="Sem mensagens da equipe nesse período, o bot encerra o atendimento e volta a responder.">
               <select className="select" value={draft.humanTimeoutMinutes} onChange={(e) => set('humanTimeoutMinutes', Number(e.target.value))}>
                 {[10, 15, 30, 60, 120, 240, 480, 1440].map((m) => <option key={m} value={m}>{duration(m)}</option>)}

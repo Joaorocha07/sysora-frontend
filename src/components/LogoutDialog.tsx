@@ -20,7 +20,7 @@ export default function LogoutDialog({ onClose }: { onClose: () => void }) {
   return (
     <ConfirmDialog
       title="Sair da conta?"
-      message="Você vai precisar entrar novamente com seu e-mail e senha para acessar o Sysora."
+      message="Você vai precisar entrar novamente com seu e-mail e senha para acessar a Sysora."
       confirmLabel="Sair"
       danger
       busy={busy}

@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // O Supabase só é usado para o login com Google (OAuth). Depois de voltar do
 // Google, o access token do Supabase vai para o backend, que emite a sessão
-// do Sysora; a sessão do Supabase no navegador é descartada em seguida.
+// da Sysora; a sessão do Supabase no navegador é descartada em seguida.
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
@@ -33,7 +33,7 @@ export async function startGoogleLogin(next: string) {
   if (error) throw error;
 }
 
-// E-mail confirmado pelo Google sem conta no Sysora: guardado até o
+// E-mail confirmado pelo Google sem conta na Sysora: guardado até o
 // cadastro (empresa ou pedido de acesso) ser concluído.
 export type GoogleSignup = { signupToken: string; email: string; name: string; avatarUrl: string | null };
 const SIGNUP_KEY = 'sysora-google-signup';

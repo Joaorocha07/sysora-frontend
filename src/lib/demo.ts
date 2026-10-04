@@ -1,4 +1,4 @@
-// Modo demonstração: uma API falsa, em memória, para navegar pelo Sysora sem
+// Modo demonstração: uma API falsa, em memória, para navegar pela Sysora sem
 // backend. Ativado pelo botão "Ver demonstração" (localStorage 'sysora-demo').
 // Os dados são gerados a partir da data de hoje e somem ao recarregar a página.
 import type {
@@ -62,11 +62,12 @@ function subscription(): Subscription {
 
 function build() {
   const services: Service[] = [
-    { id: 's1', name: 'Consulta', description: 'Primeira conversa e avaliação completa.', durationMinutes: 60, priceCents: 15000, active: true, position: 0 },
-    { id: 's2', name: 'Retorno', description: null, durationMinutes: 30, priceCents: 0, active: true, position: 1 },
-    { id: 's3', name: 'Sessão completa', description: 'Atendimento de 90 minutos.', durationMinutes: 90, priceCents: 22000, active: true, position: 2 },
-    { id: 's4', name: 'Avaliação rápida', description: null, durationMinutes: 20, priceCents: 6000, active: true, position: 3 },
-    { id: 's5', name: 'Pacote mensal', description: 'Quatro sessões no mês.', durationMinutes: 60, priceCents: 52000, active: false, position: 4 },
+    { id: 's1', kind: 'SERVICE', name: 'Consulta', description: 'Primeira conversa e avaliação completa.', durationMinutes: 60, priceCents: 15000, active: true, position: 0 },
+    { id: 's2', kind: 'SERVICE', name: 'Retorno', description: null, durationMinutes: 30, priceCents: 0, active: true, position: 1 },
+    { id: 's3', kind: 'SERVICE', name: 'Sessão completa', description: 'Atendimento de 90 minutos.', durationMinutes: 90, priceCents: 22000, active: true, position: 2 },
+    { id: 's4', kind: 'SERVICE', name: 'Avaliação rápida', description: null, durationMinutes: 20, priceCents: 6000, active: true, position: 3 },
+    { id: 's5', kind: 'SERVICE', name: 'Pacote mensal', description: 'Quatro sessões no mês.', durationMinutes: 60, priceCents: 52000, active: false, position: 4 },
+    { id: 's6', kind: 'PRODUCT', name: 'Kit de cuidados em casa', description: 'Produtos para manter o resultado entre as sessões.', durationMinutes: 0, priceCents: 8900, active: true, position: 5 },
   ];
   const names = ['Ana Lima', 'Bruno Martins', 'Carla Souza', 'Diego Alves', 'Eduarda Rocha', 'Felipe Costa', 'Gabriela Nunes', 'Henrique Dias', 'Isabela Freitas', 'João Pedro Silva', 'Larissa Moura', 'Marcos Vinícius'];
   const clients: Client[] = names.map((name, i) => ({
@@ -86,13 +87,13 @@ function build() {
 
   const plan: [number, string, string[], AppointmentStatus, 'BOT' | 'STAFF'][] = [
     [-3, '09:00', ['s1'], 'COMPLETED', 'BOT'], [-2, '14:00', ['s3'], 'COMPLETED', 'STAFF'], [-1, '10:30', ['s2'], 'NO_SHOW', 'BOT'],
-    [-1, '16:00', ['s1', 's2'], 'COMPLETED', 'BOT'], [0, '09:00', ['s1'], 'CONFIRMED', 'BOT'], [0, '10:30', ['s4'], 'SCHEDULED', 'STAFF'],
+    [-1, '16:00', ['s1', 's6'], 'COMPLETED', 'BOT'], [0, '09:00', ['s1'], 'CONFIRMED', 'BOT'], [0, '10:30', ['s4'], 'SCHEDULED', 'STAFF'],
     [0, '14:00', ['s3'], 'CONFIRMED', 'BOT'], [0, '16:30', ['s2'], 'SCHEDULED', 'BOT'], [1, '09:30', ['s1'], 'SCHEDULED', 'BOT'],
     [1, '11:00', ['s2'], 'CANCELED', 'BOT'], [1, '15:00', ['s3'], 'CONFIRMED', 'STAFF'], [2, '10:00', ['s1', 's4'], 'SCHEDULED', 'BOT'],
     [3, '13:30', ['s1'], 'SCHEDULED', 'BOT'], [4, '09:00', ['s3'], 'SCHEDULED', 'STAFF'], [5, '10:00', ['s2'], 'SCHEDULED', 'BOT'],
   ];
   const appointments: Appointment[] = plan.map(([offset, start, ids, status, source], i) => {
-    const items = ids.map((sid) => { const s = services.find((x) => x.id === sid)!; return { id: id(), serviceId: s.id, name: s.name, durationMinutes: s.durationMinutes, priceCents: s.priceCents }; });
+    const items = ids.map((sid) => { const s = services.find((x) => x.id === sid)!; return { id: id(), serviceId: s.id, kind: s.kind, name: s.name, durationMinutes: s.durationMinutes, priceCents: s.priceCents }; });
     const client = clients[i % clients.length];
     const minutes = items.reduce((sum, it) => sum + it.durationMinutes, 0);
     return {
@@ -219,7 +220,7 @@ const clientCount = (c: Client) => ({ ...c, _count: { appointments: data().appoi
 
 function makeAppointment(body: { clientId?: string; serviceIds: string[]; date: string; startTime: string; staffId?: string | null; notes?: string | null }, base?: Appointment): Appointment {
   const d = data();
-  const items = body.serviceIds.map((sid) => { const s = d.services.find((x) => x.id === sid) ?? fail('Serviço não encontrado.'); return { id: id(), serviceId: s.id, name: s.name, durationMinutes: s.durationMinutes, priceCents: s.priceCents }; });
+  const items = body.serviceIds.map((sid) => { const s = d.services.find((x) => x.id === sid) ?? fail('Serviço não encontrado.'); return { id: id(), serviceId: s.id, kind: s.kind, name: s.name, durationMinutes: s.durationMinutes, priceCents: s.priceCents }; });
   const client = d.clients.find((c) => c.id === (body.clientId ?? base?.clientId)) ?? fail('Cliente não encontrado.');
   const staff = d.members.find((m) => m.id === body.staffId);
   const minutes = items.reduce((sum, it) => sum + it.durationMinutes, 0);
@@ -278,6 +279,50 @@ function fakeQr(): string {
     if (finder ? ring : (x >> 16) % 2 === 0) cells += `<rect x="${c}" y="${r}" width="1" height="1"/>`;
   }
   return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 27 27" shape-rendering="crispEdges"><rect x="-1" y="-1" width="27" height="27" fill="#fff"/><g fill="#000">${cells}</g></svg>`)}`;
+}
+
+// "Testar conversa" na demonstração: percorre os menus do fluxo. As funções do
+// sistema (agendar, catálogo...) só explicam o que o bot faria de verdade.
+const demoSims = new Map<string, string>();
+const DEMO_ACTIONS: Record<string, string> = {
+  agendar: 'o bot mostraria os seus serviços, os próximos dias com horário livre e os horários da agenda, e marcaria o agendamento',
+  meus: 'o bot mostraria o próximo horário do cliente para confirmar, remarcar ou cancelar',
+  servicos: 'o bot enviaria a lista de serviços e produtos com os preços do seu catálogo',
+  equipe: 'o bot passaria a conversa para a sua equipe e ficaria em silêncio',
+};
+
+function demoSimulate(body: { simId: string | null; text: string; flow: FlowNode; profileName?: string }) {
+  const simId = body.simId ?? id();
+  const company = DEMO_COMPANIES[Math.max(0, data().companyIdx)]?.name ?? 'Studio Aurora';
+  const fill = (t: string) => t.replaceAll('{nome}', body.profileName ?? 'Maria').replaceAll('{empresa}', company);
+  const find = (node: FlowNode, nodeId: string): FlowNode | null => (node.id === nodeId ? node : (node.options ?? []).map((o) => find(o, nodeId)).find(Boolean) ?? null);
+  const menuText = (menu: FlowNode) => `${fill(menu.prompt ?? 'Responda com o número:')}\n\n${(menu.options ?? []).map((o, i) => `${i + 1}) ${fill(o.label)}`).join('\n')}`;
+  const root = body.flow;
+  const current = demoSims.get(simId) ? find(root, demoSims.get(simId)!) : null;
+  const option = current && /^\d+$/.test(body.text.trim()) ? current.options?.[Number(body.text.trim()) - 1] : undefined;
+
+  if (!current || !option) {
+    demoSims.set(simId, root.id);
+    return { simId, replies: [...root.messages.map(fill), menuText(root)], step: 'MENU', inactive: false };
+  }
+  const say = option.messages.map(fill);
+  if (option.type === 'menu') {
+    demoSims.set(simId, option.id);
+    return { simId, replies: [...say, menuText(option)], step: 'MENU', inactive: false };
+  }
+  if (option.type === 'end') {
+    demoSims.delete(simId);
+    return { simId, replies: say, step: null, inactive: false };
+  }
+  if (option.type === 'action') {
+    const human = option.action === 'equipe';
+    demoSims.set(simId, root.id);
+    const note = `(Demonstração) Aqui ${DEMO_ACTIONS[option.action ?? 'agendar']}. Na sua conta, o teste usa o bot de verdade com o seu catálogo e a sua agenda.`;
+    return { simId, replies: [...say, note, ...(human ? [] : [menuText(root)])], step: human ? 'HUMAN' : 'MENU', inactive: false };
+  }
+  const back = option.next === 'parent' ? current : root;
+  demoSims.set(simId, back.id);
+  return { simId, replies: [...say, menuText(back)], step: 'MENU', inactive: false };
 }
 
 function whatsappStatus() {
@@ -413,7 +458,8 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   if (path === '/services' && method === 'GET') return { services: [...d.services].sort((a, b) => a.position - b.position).map(withCount) };
   if (path === '/services' && method === 'POST') {
     if (d.services.some((s) => s.name.toLowerCase() === String(body.name).toLowerCase())) fail('Já existe um serviço com esse nome.', 409);
-    const service = { active: true, description: null, ...body, id: id(), position: d.services.length } as Service;
+    const service = { kind: 'SERVICE', active: true, description: null, ...body, id: id(), position: d.services.length } as Service;
+    if (service.kind === 'PRODUCT') service.durationMinutes = 0;
     d.services.push(service);
     return { service };
   }
@@ -515,6 +561,9 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   }
   if (path === '/whatsapp/ai') return { used: 0, limit: 1500, available: true, transcription: true, allowed: d.sub.ai };
   if (path === '/whatsapp/flow/understand') return demoUnderstand(body as { flow: FlowNode; text: string });
+  if (path === '/survey' && method === 'GET') return { eligible: false, status: 'done' };
+  if (path.startsWith('/survey')) return { status: 'done' };
+  if (path === '/whatsapp/simulate') return demoSimulate(body as { simId: string | null; text: string; flow: FlowNode; profileName?: string });
 
   return fail('Recurso indisponível no modo demonstração.', 404);
 }

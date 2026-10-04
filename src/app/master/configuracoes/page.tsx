@@ -5,7 +5,7 @@ import AccountForm from '@/components/AccountForm';
 import { Loading, PageHead, Switch, useToast } from '@/components/ui';
 import { adminApi, errorMessage, type PlatformSettings } from '@/lib/api';
 
-// Configurações da plataforma (valem para todo o Sysora) e a conta do admin master.
+// Configurações da plataforma (valem para toda a Sysora) e a conta do admin master.
 export default function MasterSettingsPage() {
   const toast = useToast();
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
@@ -33,11 +33,11 @@ export default function MasterSettingsPage() {
 
   return (
     <>
-      <PageHead eyebrow="Painel master" title="Configurações" text="Regras que valem para todo o Sysora e a sua conta de admin master." />
+      <PageHead eyebrow="Painel master" title="Configurações" text="Regras que valem para toda a Sysora e a sua conta de admin master." />
 
       <div className="stack" style={{ maxWidth: 560 }}>
         <div className="card card-pad stack">
-          <div><h3>Cadastro pelo site</h3><small>Quem pode criar uma conta nova no Sysora.</small></div>
+          <div><h3>Cadastro pelo site</h3><small>Quem pode criar uma conta nova na Sysora.</small></div>
           <div className="divider" />
           {!settings ? <Loading /> : (
             <Switch

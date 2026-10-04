@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { ArrowLeft, Bot, Headset, MessageCircle, Search, Send, UserRound } from 'lucide-react';
+import { ArrowLeft, Bot, Clock, Headset, MessageCircle, Search, Send, UserRound } from 'lucide-react';
 import { useShell } from '@/components/AppShell';
 import { Avatar, Empty, Loading, useToast } from '@/components/ui';
-import { conversationsApi, errorMessage, type BotState, type Client, type Conversation, type Message } from '@/lib/api';
+import { conversationsApi, errorMessage, type BotState, type Client, type Conversation, type ConversationChannel, type Message } from '@/lib/api';
 import { clock, longDate, relativeTime, toIsoDate } from '@/lib/format';
 
 function Inbox() {
@@ -75,6 +75,7 @@ function Chat({ clientId, onBack, onActivity, onError }: { clientId: string; onB
   const [client, setClient] = useState<Client | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [bot, setBot] = useState<BotState | null>(null);
+  const [channel, setChannel] = useState<ConversationChannel | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -86,6 +87,7 @@ function Chat({ clientId, onBack, onActivity, onError }: { clientId: string; onB
       setClient(data.client);
       setMessages(data.messages);
       setBot(data.bot);
+      setChannel(data.channel);
       if (first) onActivity();
     } catch (err) {
       if (first) onError(errorMessage(err));
@@ -139,6 +141,20 @@ function Chat({ clientId, onBack, onActivity, onError }: { clientId: string; onB
 
   if (!client) return <div className="chat" style={{ display: 'grid', placeItems: 'center' }}><span className="spinner" /></div>;
 
+  // Sem o canal (resposta antiga do servidor), vale só ter WhatsApp vinculado.
+  const canReply = channel ? channel.canReply : Boolean(client.whatsappId);
+  const windowEnds = channel?.windowEndsAt ? new Date(channel.windowEndsAt) : null;
+  const windowOpen = Boolean(windowEnds && windowEnds.getTime() > Date.now());
+  const closedReason = !client.whatsappId
+    ? 'Cliente sem WhatsApp vinculado'
+    : channel?.hiddenNumber
+      ? 'O WhatsApp não mostrou o número deste cliente. Informe o telefone na ficha para poder responder.'
+      : channel?.official && !windowOpen
+        ? 'Passaram 24 horas desde a última mensagem do cliente. Pelo WhatsApp oficial, você poderá responder quando ele escrever de novo.'
+        : null;
+  // Aviso quando faltam menos de 3 horas para a janela de resposta fechar.
+  const closingSoon = channel?.official && windowOpen && windowEnds!.getTime() - Date.now() < 3 * 60 * 60 * 1000;
+
   let lastDay = '';
   return (
     <div className="chat">
@@ -183,17 +199,27 @@ function Chat({ clientId, onBack, onActivity, onError }: { clientId: string; onB
         {!messages.length && <p className="muted" style={{ margin: 'auto' }}>Nenhuma mensagem ainda.</p>}
       </div>
 
+      {(closedReason || closingSoon) && client.whatsappId && (
+        <div className="bot-state">
+          <Clock size={16} />
+          <span style={{ flex: 1 }}>
+            {closedReason ?? `Você pode responder até ${clock(windowEnds!.toISOString())}. Depois disso, só quando o cliente escrever de novo (regra do WhatsApp oficial).`}
+          </span>
+          {channel?.hiddenNumber && <Link href={`/clientes/${client.id}`} className="btn btn-sm btn-outline">Abrir ficha</Link>}
+        </div>
+      )}
+
       <form className="chat-foot" onSubmit={send}>
         <textarea
           className="textarea"
           rows={1}
-          placeholder={client.whatsappId ? 'Escreva uma mensagem (Enter envia)' : 'Cliente sem WhatsApp vinculado'}
+          placeholder={canReply ? 'Escreva uma mensagem (Enter envia)' : client.whatsappId ? 'Não é possível responder agora' : 'Cliente sem WhatsApp vinculado'}
           value={text}
-          disabled={!client.whatsappId}
+          disabled={!canReply}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
         />
-        <button className="btn btn-primary" style={{ width: 44, padding: 0 }} disabled={!text.trim() || sending || !client.whatsappId} aria-label="Enviar">
+        <button className="btn btn-primary" style={{ width: 44, padding: 0 }} disabled={!text.trim() || sending || !canReply} aria-label="Enviar">
           {sending ? <span className="spinner" /> : <Send size={17} />}
         </button>
       </form>

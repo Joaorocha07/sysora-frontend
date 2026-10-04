@@ -45,12 +45,14 @@ export type Client = {
   _count?: { appointments: number };
 };
 
+// SERVICE: tem duração e ocupa horário. PRODUCT: pronta entrega, sem duração (0).
+export type ServiceKind = 'SERVICE' | 'PRODUCT';
 export type Service = {
-  id: string; name: string; description: string | null; durationMinutes: number; priceCents: number;
+  id: string; kind: ServiceKind; name: string; description: string | null; durationMinutes: number; priceCents: number;
   active: boolean; position: number; _count?: { appointments: number };
 };
 
-export type AppointmentItem = { id: string; serviceId: string | null; name: string; durationMinutes: number; priceCents: number };
+export type AppointmentItem = { id: string; serviceId: string | null; kind: ServiceKind; name: string; durationMinutes: number; priceCents: number };
 export type Appointment = {
   id: string; clientId: string; staffId: string | null; date: string; startTime: string; endTime: string;
   status: AppointmentStatus; source: Source; notes: string | null; totalCents: number;
@@ -80,7 +82,31 @@ export type Settings = {
 };
 export type CompanyProfile = { id: string; name: string; slug: string; document: string | null; phone: string | null; email: string | null; inviteCode: string };
 
-export type WhatsAppStatus = { status: 'disconnected' | 'connecting' | 'qr' | 'connected'; qr: string | null; phone: string | null; error: string | null };
+// Número conectado pela API oficial do WhatsApp (Cloud API da Meta).
+export type WhatsAppTemplateStatus = 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'MISSING' | string;
+export type WhatsAppCloudInfo = {
+  phone: string | null; verifiedName: string | null; wabaId: string; phoneNumberId: string; coexistence: boolean;
+  // Conexão manual: a empresa usa o próprio app da Meta.
+  manual: boolean; appId: string | null; webhook: WhatsAppWebhookSetup | null; lastWebhookAt: string | null;
+  // Situação na Meta (nulo = não foi possível consultar).
+  health: { paymentConfigured: boolean | null; nameStatus: string | null; qualityRating: string | null; businessVerification: string | null };
+  templates: { name: string; label: string; status: WhatsAppTemplateStatus }[];
+  lastError: string | null; lastErrorAt: string | null; connectedAt: string; managerUrl: string;
+};
+export type WhatsAppStatus = {
+  status: 'disconnected' | 'connecting' | 'qr' | 'connected'; qr: string | null; phone: string | null; error: string | null;
+  // cloud = API oficial; qr = QR Code (WhatsApp Web); null = nada conectado.
+  provider: 'cloud' | 'qr' | null; cloud: WhatsAppCloudInfo | null;
+};
+export type WhatsAppCloudConfig = { enabled: boolean; appId: string | null; configId: string | null; graphVersion: string };
+export type WhatsAppOnboardInput = { code: string; wabaId: string; phoneNumberId: string; businessId?: string | null; coexistence: boolean };
+export type WhatsAppWebhookSetup = { url: string; verifyToken: string; fields: string[] };
+type UsageCount = { total: number; billable: number };
+export type WhatsAppUsage = {
+  month: string; freeLimit: number; freeUsed: number;
+  service: UsageCount; utility: UsageCount; marketing: UsageCount; authentication: UsageCount;
+  estimatedCents: number; prices: Record<'service' | 'utility' | 'marketing' | 'authentication', number>;
+};
 
 // Fluxo do chatbot (aba "Fluxo do bot"): árvore de menus a partir das boas-vindas.
 export type FlowAction = 'agendar' | 'meus' | 'servicos' | 'equipe';
@@ -112,7 +138,7 @@ export type AdminCompany = {
   subscription: Subscription; active: boolean; selfSignup: boolean; inviteCode: string; createdAt: string; whatsappConnected: boolean; whatsappPhone: string | null;
   users: number; admins: { id: string; name: string; email: string; avatarUrl: string | null }[]; clients: number; appointments: number; services: number;
 };
-// Pessoa cadastrada no Sysora (painel master > Usuários).
+// Pessoa cadastrada na Sysora (painel master > Usuários).
 export type AdminUser = {
   id: string; name: string; email: string; phone: string | null; avatarUrl: string | null;
   isSuperAdmin: boolean; active: boolean; google: boolean; lastLoginAt: string | null; createdAt: string;
@@ -320,6 +346,22 @@ export const adminApi = {
     send<{ subscription: Subscription }>('PATCH', `/admin/accounts/${accountId}`, input).then((r) => r.subscription),
   registerPayment: (accountId: string) =>
     send<{ subscription: Subscription }>('POST', `/admin/accounts/${accountId}/payment`).then((r) => r.subscription),
+  surveys: () => get<SurveySummary>('/admin/surveys'),
+  whatsapp: () => get<WhatsAppPlatformSetup>('/admin/whatsapp'),
+  whatsappCheck: () => send<WhatsAppPlatformCheck>('POST', '/admin/whatsapp/check'),
+  whatsappWebhook: () => send<WhatsAppPlatformCheck>('POST', '/admin/whatsapp/webhook'),
+};
+
+// App da Meta da Sysora (painel master → WhatsApp oficial).
+export type WhatsAppPlatformSetup = {
+  enabled: boolean;
+  config: { appId: string | null; appSecretSet: boolean; configId: string | null; verifyTokenSet: boolean; publicApiUrl: string | null; graphVersion: string };
+  webhook: { url: string; verifyToken: string | null; fields: string[] };
+  companies: { official: number; qr: number };
+};
+export type WhatsAppPlatformCheck = {
+  app: { ok: boolean; name: string | null; error: string | null };
+  webhook: { configured: boolean; callbackUrl: string | null; urlMatches: boolean; missingFields: string[]; error?: string } | null;
 };
 
 export const accountApi = {
@@ -373,14 +415,14 @@ export const clientsApi = {
   remove: (id: string) => send('DELETE', `/clients/${id}`),
 };
 
-export type ServiceInput = { name: string; description?: string | null; durationMinutes: number; priceCents: number; active?: boolean; position?: number };
+export type ServiceInput = { kind?: ServiceKind; name: string; description?: string | null; durationMinutes: number; priceCents: number; active?: boolean; position?: number };
 export const servicesApi = {
   list: () => get<{ services: Service[] }>('/services').then((r) => r.services),
   create: (input: ServiceInput) => send<{ service: Service }>('POST', '/services', input).then((r) => r.service),
   update: (id: string, input: Partial<ServiceInput>) => send<{ service: Service }>('PATCH', `/services/${id}`, input).then((r) => r.service),
   remove: (id: string) => send('DELETE', `/services/${id}`),
   // Texto sugerido pela IA para a descrição (não salva nada).
-  improveDescription: (input: { name: string; description?: string | null; priceCents?: number; durationMinutes?: number }) =>
+  improveDescription: (input: { kind?: ServiceKind; name: string; description?: string | null; priceCents?: number; durationMinutes?: number }) =>
     send<{ description: string }>('POST', '/services/improve-description', input).then((r) => r.description),
 };
 
@@ -401,14 +443,37 @@ export const appointmentsApi = {
   remove: (id: string) => send('DELETE', `/appointments/${id}`),
 };
 
+// Pelo WhatsApp oficial a equipe só escreve até 24 h depois da última mensagem do cliente.
+export type ConversationChannel = { official: boolean; windowEndsAt: string | null; canReply: boolean; hiddenNumber: boolean };
+
 export const conversationsApi = {
   list: () => get<{ conversations: Conversation[] }>('/conversations').then((r) => r.conversations),
-  get: (clientId: string) => get<{ client: Client; messages: Message[]; bot: BotState }>(`/conversations/${clientId}`),
+  get: (clientId: string) => get<{ client: Client; messages: Message[]; bot: BotState; channel: ConversationChannel }>(`/conversations/${clientId}`),
   reply: (clientId: string, text: string) => send<{ bot: BotState }>('POST', `/conversations/${clientId}/reply`, { text }),
   resumeBot: (clientId: string) => send<{ bot: BotState }>('POST', `/conversations/${clientId}/resume-bot`),
 };
 
 export const dashboardApi = { get: () => get<Dashboard>('/dashboard') };
+
+// Pesquisa inicial (todo usuário de empresa). status: done = respondeu;
+// dismissed = escolheu responder depois; pending = ainda não viu o convite.
+export type SurveyStatus = { eligible: boolean; status: 'done' | 'dismissed' | 'pending' };
+export type SurveyAnswers = {
+  sources: string[]; sourceOther?: string | null; business: string; businessOther?: string | null;
+  teamSize: string; features: string[]; featuresOther?: string | null; comment?: string | null;
+};
+export const surveyApi = {
+  status: () => get<SurveyStatus>('/survey'),
+  submit: (answers: SurveyAnswers) => send<{ status: 'done' }>('POST', '/survey', answers),
+  dismiss: () => send<{ status: 'dismissed' }>('POST', '/survey/dismiss'),
+};
+
+type Tally = { id: string; count: number }[];
+export type SurveySummary = {
+  total: number; users: number; dismissed: number;
+  sources: Tally; business: Tally; teamSize: Tally; features: Tally;
+  responses: (SurveyAnswers & { id: string; createdAt: string; user: { name: string; email: string }; company: string | null })[];
+};
 
 export const settingsApi = {
   get: () => get<{ settings: Settings; company: CompanyProfile }>('/settings'),
@@ -423,6 +488,10 @@ export const whatsappApi = {
   connect: () => send<WhatsAppStatus>('POST', '/whatsapp/connect'),
   disconnect: () => send<WhatsAppStatus>('POST', '/whatsapp/disconnect'),
   test: (to: string) => send<{ message: string }>('POST', '/whatsapp/test', { to }),
+  cloudConfig: () => get<WhatsAppCloudConfig>('/whatsapp/cloud/config'),
+  cloudOnboard: (input: WhatsAppOnboardInput) => send<WhatsAppStatus>('POST', '/whatsapp/cloud/onboard', input),
+  cloudUsage: () => get<WhatsAppUsage>('/whatsapp/cloud/usage'),
+  cloudTemplates: () => send<WhatsAppStatus>('POST', '/whatsapp/cloud/templates'),
   flow: () => get<BotFlow>('/whatsapp/flow'),
   saveFlow: (flow: FlowNode) => send<BotFlow>('PUT', '/whatsapp/flow', { flow }),
   resetFlow: () => send<BotFlow>('DELETE', '/whatsapp/flow'),
@@ -432,4 +501,7 @@ export const whatsappApi = {
   // IA do atendimento: status/uso e o que ela entenderia de uma mensagem (simulador).
   ai: () => get<BotAiStatus>('/whatsapp/ai'),
   understand: (flow: FlowNode, text: string, nodeId?: string) => send<BotAiUnderstood>('POST', '/whatsapp/flow/understand', { flow, text, nodeId }),
+  // Conversa com o bot de verdade, sem gravar nem enviar nada (ver whatsapp.simulator.ts).
+  simulate: (input: { simId: string | null; text: string; flow: FlowNode; profileName?: string }) =>
+    send<{ simId: string; replies: string[]; step: string | null; inactive: boolean }>('POST', '/whatsapp/simulate', input),
 };

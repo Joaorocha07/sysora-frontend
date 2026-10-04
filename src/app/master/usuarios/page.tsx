@@ -28,7 +28,7 @@ function matches(u: AdminUser, filter: Filter) {
 
 const DAY = 86_400_000;
 
-// Todas as pessoas cadastradas no Sysora: donos, administradores e funcionários de todas as empresas.
+// Todas as pessoas cadastradas na Sysora: donos, administradores e funcionários de todas as empresas.
 export default function MasterUsersPage() {
   const toast = useToast();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
@@ -54,7 +54,7 @@ export default function MasterUsersPage() {
 
   return (
     <>
-      <PageHead eyebrow="Painel master" title="Usuários" text="Todas as pessoas cadastradas no Sysora, as empresas de cada uma e como entram no sistema." />
+      <PageHead eyebrow="Painel master" title="Usuários" text="Todas as pessoas cadastradas na Sysora, as empresas de cada uma e como entram no sistema." />
 
       <div className="metrics">
         {metrics.map(({ label, value, hint, icon: Icon }) => (

@@ -11,6 +11,7 @@ import {
 import { duration, longDate, money, today } from '@/lib/format';
 
 // Novo agendamento ou edição (remarcar, trocar serviços, profissional).
+// Produtos (pronta entrega) entram junto: somam no valor, não na duração.
 export default function AppointmentModal({ appointment, defaultDate, defaultClient, onClose, onSaved }: {
   appointment?: Appointment | null;
   defaultDate?: string;
@@ -52,17 +53,22 @@ export default function AppointmentModal({ appointment, defaultDate, defaultClie
     return () => clearTimeout(timer);
   }, [search, editing]);
 
+  const chosen = useMemo(() => serviceIds.map((id) => services.find((s) => s.id === id)).filter((s): s is Service => Boolean(s)), [serviceIds, services]);
+  const bookable = services.filter((s) => s.kind !== 'PRODUCT');
+  const products = services.filter((s) => s.kind === 'PRODUCT');
+  // Só os serviços definem os horários livres (produto não ocupa a agenda).
+  const timedIds = chosen.filter((s) => s.kind !== 'PRODUCT').map((s) => s.id).join(',');
+
   // Horários livres do dia para os serviços escolhidos (mesma regra do bot).
   useEffect(() => {
-    if (!date || !serviceIds.length) { setTimes(null); return; }
+    if (!date || !timedIds) { setTimes(null); return; }
     setLoadingTimes(true);
-    appointmentsApi.availability(date, serviceIds, appointment?.id)
+    appointmentsApi.availability(date, timedIds.split(','), appointment?.id)
       .then((r) => setTimes(r.times))
       .catch(() => setTimes([]))
       .finally(() => setLoadingTimes(false));
-  }, [date, serviceIds, appointment?.id]);
+  }, [date, timedIds, appointment?.id]);
 
-  const chosen = useMemo(() => serviceIds.map((id) => services.find((s) => s.id === id)).filter((s): s is Service => Boolean(s)), [serviceIds, services]);
   const totalMinutes = chosen.reduce((sum, s) => sum + s.durationMinutes, 0);
   const totalCents = chosen.reduce((sum, s) => sum + s.priceCents, 0);
 
@@ -71,7 +77,7 @@ export default function AppointmentModal({ appointment, defaultDate, defaultClie
   async function save(ignoreConflicts = false) {
     setError(null);
     if (!clientId) return setError('Selecione o cliente.');
-    if (!serviceIds.length) return setError('Selecione pelo menos um serviço.');
+    if (!timedIds) return setError('Selecione pelo menos um serviço com horário. Produtos entram junto com um serviço.');
     if (!time) return setError('Escolha o horário.');
     setBusy(true);
     try {
@@ -143,16 +149,28 @@ export default function AppointmentModal({ appointment, defaultDate, defaultClie
           </Field>
         )}
 
-        <Field label="Serviços" hint={chosen.length ? `Duração total: ${duration(totalMinutes)} · ${money(totalCents)}` : 'Selecione um ou mais serviços.'}>
+        <Field label="Serviços" hint={timedIds ? `Duração total: ${duration(totalMinutes)} · ${money(totalCents)}` : 'Selecione um ou mais serviços.'}>
           <div className="chips">
-            {services.map((s) => (
+            {bookable.map((s) => (
               <button key={s.id} type="button" className={`chip${serviceIds.includes(s.id) ? ' on' : ''}`} onClick={() => toggleService(s.id)}>
                 {s.name} · {duration(s.durationMinutes)}
               </button>
             ))}
-            {!services.length && <small>Nenhum serviço cadastrado. Cadastre em Serviços.</small>}
+            {!bookable.length && <small>Nenhum serviço cadastrado. Cadastre em Serviços.</small>}
           </div>
         </Field>
+
+        {products.length > 0 && (
+          <Field label="Produtos (opcional)" hint="O cliente leva no dia do atendimento: o valor entra no total, sem mudar a duração.">
+            <div className="chips">
+              {products.map((s) => (
+                <button key={s.id} type="button" className={`chip${serviceIds.includes(s.id) ? ' on' : ''}`} onClick={() => toggleService(s.id)}>
+                  {s.name} · {s.priceCents ? money(s.priceCents) : 'sob consulta'}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
 
         <div className="grid-2">
           <Field label="Data" hint={date ? longDate(date) : undefined}>
@@ -163,7 +181,7 @@ export default function AppointmentModal({ appointment, defaultDate, defaultClie
           </Field>
         </div>
 
-        {serviceIds.length > 0 && (
+        {Boolean(timedIds) && (
           <div className="stack-sm">
             <small>{loadingTimes ? 'Buscando horários livres...' : times?.length ? 'Horários livres' : 'Nenhum horário livre na grade deste dia.'}</small>
             {!!times?.length && (

@@ -3,11 +3,11 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Bot, CalendarCheck, Check, CalendarDays, MessageCircle, Plus, QrCode, TrendingUp, Users } from 'lucide-react';
+import { ArrowRight, Bot, CalendarCheck, Check, CalendarDays, ClipboardList, MessageCircle, Plus, QrCode, TrendingUp, Users } from 'lucide-react';
 import AppointmentDetails from '@/components/AppointmentDetails';
 import AppointmentModal from '@/components/AppointmentModal';
 import { Empty, Loading, useToast } from '@/components/ui';
-import { dashboardApi, errorMessage, type Appointment, type Dashboard } from '@/lib/api';
+import { dashboardApi, errorMessage, surveyApi, type Appointment, type Dashboard } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { STATUS, WEEKDAYS, firstName, longDate, money, shortDate, today, weekday } from '@/lib/format';
 
@@ -22,11 +22,17 @@ export default function PainelPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<Appointment | null>(null);
+  // Pesquisa inicial ainda não respondida: o aviso fica até a pessoa responder.
+  const [surveyPending, setSurveyPending] = useState(false);
 
   const load = useCallback(() => {
     dashboardApi.get().then(setData).catch((err) => toast(errorMessage(err), true));
   }, [toast]);
   useEffect(load, [load]);
+
+  useEffect(() => {
+    surveyApi.status().then((r) => setSurveyPending(r.eligible && r.status !== 'done')).catch(() => {});
+  }, []);
 
   if (!data) return <Loading />;
 
@@ -59,6 +65,17 @@ export default function PainelPage() {
         </div>
       </section>
 
+      {surveyPending && (
+        <div className="card survey-invite">
+          <span className="metric-icon"><ClipboardList size={18} /></span>
+          <div>
+            <strong style={{ display: 'block' }}>Falta pouco para conhecermos o seu negócio</strong>
+            <small className="muted">Você ainda não respondeu a pesquisa rápida: são 4 perguntas de marcar, menos de 3 minutos, e ajudam a melhorar a Sysora para você.</small>
+          </div>
+          <Link href="/pesquisa" className="btn btn-primary btn-sm">Responder agora <ArrowRight size={15} /></Link>
+        </div>
+      )}
+
       <div className="metrics">
         {metrics.map(({ label, value, hint, icon: Icon }) => (
           <div key={label} className="card metric">
@@ -74,9 +91,9 @@ export default function PainelPage() {
           <div className="card-head" style={{ paddingBottom: 14 }}><div><h2>Primeiros passos</h2><p>Deixe o bot pronto para atender seus clientes</p></div></div>
           <div className="onboarding">
             {[
-              { done: data.servicesCount > 0, href: '/servicos', title: 'Cadastre seus serviços', text: 'Nome, duração e preço. O bot usa essa lista para agendar.' },
+              { done: data.servicesCount > 0, href: '/servicos', title: 'Monte seu catálogo', text: 'Serviços com duração e preço (e produtos, se vender). O bot usa essa lista no WhatsApp.' },
               { done: false, href: '/configuracoes?aba=horarios', title: 'Confira os horários de atendimento', text: 'Dias, abertura, fechamento e intervalo de almoço.' },
-              { done: data.whatsapp.whatsappConnected, href: '/whatsapp', title: 'Conecte o WhatsApp', text: 'Leia o QR Code com o celular da empresa.' },
+              { done: data.whatsapp.whatsappConnected, href: '/whatsapp', title: 'Conecte o WhatsApp', text: 'Conecte o número da empresa pelo WhatsApp oficial, em poucos cliques.' },
               ...(data.pendingUsers > 0 ? [{ done: false, href: '/equipe', title: `Aprove ${data.pendingUsers} ${data.pendingUsers === 1 ? 'pedido' : 'pedidos'} de acesso`, text: 'Pessoas da equipe pediram para entrar com o código da empresa.' }] : []),
             ].map((step) => (
               <Link key={step.href} href={step.href}>

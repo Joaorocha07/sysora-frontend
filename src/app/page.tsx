@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import {
-  ArrowRight, Bell, Bot, Building2, CalendarCheck, CalendarDays, Check, LayoutDashboard, MessageCircle, QrCode,
+  ArrowRight, Bell, Bot, Building2, CalendarCheck, CalendarDays, Check, LayoutDashboard, MessageCircle,
   ShieldCheck, Sparkles, UserCog, Users, Wrench,
 } from 'lucide-react';
 import Logo from '@/components/Logo';
@@ -19,7 +19,7 @@ const features = [
 ];
 
 const steps = [
-  { title: 'Conecte o WhatsApp', text: 'Leia o QR Code no painel, igual ao WhatsApp Web. O número da empresa continua funcionando no celular.' },
+  { title: 'Conecte o WhatsApp', text: 'Conecte o número pela API oficial da Meta em poucos cliques. Quem usa o WhatsApp Business continua atendendo pelo celular.' },
   { title: 'Cadastre seus serviços', text: 'Defina o que você oferece, quanto tempo leva e quanto custa. Configure dias e horários de atendimento.' },
   { title: 'O bot atende', text: 'Clientes mandam “oi” e recebem o menu: agendar, ver horários, conhecer os serviços ou falar com a equipe.' },
   { title: 'Tudo cai no sistema', text: 'Clientes, agendamentos e conversas ficam organizados no painel, prontos para a sua equipe acompanhar.' },
@@ -63,7 +63,7 @@ export default function Landing() {
             <div className="hero-pill"><b>Novo</b> Chatbot de WhatsApp integrado</div>
             <h1>Seus clientes e sua agenda, <em>no automático.</em></h1>
             <p className="lead">
-              O Sysora é um sistema de cadastro de clientes e agendamentos com um chatbot conectado ao WhatsApp
+              A Sysora é um sistema de cadastro de clientes e agendamentos com um chatbot conectado ao WhatsApp
               da sua empresa. Ele conversa, cadastra, agenda e lembra seus clientes, enquanto você cuida do que importa.
             </p>
             <div className="cta">
@@ -120,8 +120,8 @@ export default function Landing() {
         <section className="section" id="como-funciona">
           <div className="section-head">
             <span className="eyebrow">Como funciona</span>
-            <h2>Do QR Code ao primeiro agendamento em minutos.</h2>
-            <p>A conexão é no estilo WhatsApp Web: nada de API paga ou aprovação de template. Basta ler o código com o celular da empresa.</p>
+            <h2>Da conexão ao primeiro agendamento em minutos.</h2>
+            <p>Conexão oficial com o WhatsApp, sem risco de bloqueio do número: você entra com a sua conta da Meta e o bot começa a atender na hora.</p>
           </div>
           <div className="flow">
             {steps.map((s) => (
@@ -182,7 +182,7 @@ export default function Landing() {
         <footer className="lp-footer">
           <Logo kind="wordmark" />
           <div className="row-wrap" style={{ gap: 18 }}>
-            <span className="row"><QrCode size={15} /> WhatsApp Web</span>
+            <span className="row"><ShieldCheck size={15} /> WhatsApp oficial</span>
             <span className="row"><LayoutDashboard size={15} /> Multiempresa</span>
           </div>
           <span>© {new Date().getFullYear()} Sysora. Todos os direitos reservados.</span>

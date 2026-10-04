@@ -446,7 +446,11 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   if ((r = m(/^\/clients\/([^/]+)$/))) {
     const client = d.clients.find((c) => c.id === r![1]) ?? fail('Cliente não encontrado.', 404);
     if (method === 'DELETE') { d.clients = d.clients.filter((c) => c !== client); d.appointments = d.appointments.filter((a) => a.clientId !== client.id); return undefined; }
-    if (method === 'PATCH') { Object.assign(client, body); return { client }; }
+    if (method === 'PATCH') {
+      const { reminders, ...rest } = body as { reminders?: boolean };
+      Object.assign(client, rest, reminders === undefined ? {} : { whatsappOptOutAt: reminders ? null : new Date().toISOString() });
+      return { client };
+    }
     return { client: { ...client, appointments: d.appointments.filter((a) => a.clientId === client.id).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime)) } };
   }
 

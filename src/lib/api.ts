@@ -42,6 +42,8 @@ export type Member = { membershipId: string; id: string; name: string; email: st
 export type Client = {
   id: string; name: string; phone: string; email: string | null; birthday: string | null; notes: string | null;
   whatsappId: string | null; source: Source; lastMessageAt: string | null; unreadCount: number; createdAt: string;
+  // Respondeu "PARAR": não recebe lembretes automáticos pelo WhatsApp.
+  whatsappOptOutAt?: string | null;
   _count?: { appointments: number };
 };
 
@@ -409,7 +411,7 @@ export const usersApi = {
   reject: (membershipId: string) => send('POST', `/users/${membershipId}/reject`),
 };
 
-export type ClientInput = { name: string; phone: string; email?: string | null; birthday?: string | null; notes?: string | null };
+export type ClientInput = { name: string; phone: string; email?: string | null; birthday?: string | null; notes?: string | null; reminders?: boolean };
 export const clientsApi = {
   list: (search?: string) => get<{ clients: Client[] }>(`/clients${qs({ search })}`).then((r) => r.clients),
   get: (id: string) => get<{ client: ClientDetail }>(`/clients/${id}`).then((r) => r.client),

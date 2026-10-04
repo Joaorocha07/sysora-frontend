@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Field, FormError, Modal } from './ui';
+import { Field, FormError, Modal, Switch } from './ui';
 import { clientsApi, errorMessage, type Client } from '@/lib/api';
 import { maskPhone } from '@/lib/format';
 
@@ -15,6 +15,7 @@ export default function ClientFormModal({ client, onClose, onSaved }: {
     birthday: client?.birthday ?? '',
     notes: client?.notes ?? '',
   });
+  const [reminders, setReminders] = useState(!client?.whatsappOptOutAt);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -25,7 +26,7 @@ export default function ClientFormModal({ client, onClose, onSaved }: {
     setError(null);
     setBusy(true);
     try {
-      const input = { ...form, email: form.email || null, birthday: form.birthday || null, notes: form.notes || null };
+      const input = { ...form, email: form.email || null, birthday: form.birthday || null, notes: form.notes || null, reminders };
       const saved = client ? await clientsApi.update(client.id, input) : await clientsApi.create(input);
       onSaved(saved);
     } catch (err) {
@@ -55,6 +56,14 @@ export default function ClientFormModal({ client, onClose, onSaved }: {
         </div>
         <Field label="E-mail"><input className="input" type="email" value={form.email} onChange={set('email')} placeholder="opcional" /></Field>
         <Field label="Observações"><textarea className="textarea" value={form.notes} onChange={set('notes')} placeholder="Preferências, alergias, informações úteis..." /></Field>
+        <Switch
+          checked={reminders}
+          onChange={setReminders}
+          label="Receber lembretes pelo WhatsApp"
+          description={client?.whatsappOptOutAt
+            ? `O cliente respondeu PARAR em ${new Date(client.whatsappOptOutAt).toLocaleDateString('pt-BR')}. Só reative se ele pedir.`
+            : 'Desligado, o bot continua atendendo, mas não envia lembretes a este cliente.'}
+        />
       </form>
     </Modal>
   );

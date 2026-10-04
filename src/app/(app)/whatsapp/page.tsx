@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Bot, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Save, Send, Smartphone, Workflow } from 'lucide-react';
+import { Bell, Bot, Check, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Save, Send, ShieldCheck, Smartphone, TriangleAlert, Workflow } from 'lucide-react';
 import { useShell } from '@/components/AppShell';
 import { BotFlowEditor } from '@/components/BotFlowEditor';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
@@ -24,6 +24,47 @@ const TABS: { id: Tab; label: string; icon: typeof Bot }[] = [
 ];
 
 const VARS = '{nome}, {empresa}, {servico}, {data} e {hora}';
+
+// O que a Sysora já faz para o número conectado por QR Code não ser bloqueado
+// (backend: whatsapp.safety.ts) e o que depende da empresa.
+const AUTO_PROTECTIONS = [
+  'O bot mostra “digitando...” e responde em poucos segundos, como uma pessoa.',
+  'Os envios são espaçados, inclusive os lembretes: nada de rajadas.',
+  'Se outro robô entrar em conversa sem fim com o número, o bot fica em silêncio.',
+  'Lembrete para quem nunca escreveu para a empresa só sai se o número tiver WhatsApp, e no máximo 20 por dia.',
+  'Quem responde PARAR deixa de receber lembretes automáticos.',
+];
+const OWNER_TIPS = [
+  'Use um número com histórico. Número novo: use normalmente no celular por 1 a 2 semanas antes de conectar.',
+  'Prefira o WhatsApp Business no celular, com foto, nome e descrição da empresa.',
+  'Não use o número para propaganda, listas de transmissão ou mensagens para quem não é cliente.',
+  'Peça para os clientes salvarem o número: contato salvo quase nunca denuncia.',
+];
+
+function NumberProtection({ officialAvailable }: { officialAvailable: boolean }) {
+  return (
+    <div className="card card-pad stack" style={{ gap: 14 }}>
+      <div className="row" style={{ gap: 10 }}>
+        <span className="metric-icon"><ShieldCheck size={18} /></span>
+        <div>
+          <strong style={{ display: 'block' }}>Proteção do número</strong>
+          <small className="muted">A conexão por QR Code não é oficial da Meta, e o WhatsApp pode restringir números que agem como robô. O risco cai muito com os cuidados abaixo.</small>
+        </div>
+      </div>
+      <div className="grid-2" style={{ alignItems: 'start' }}>
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="eyebrow">Automático na Sysora</span>
+          {AUTO_PROTECTIONS.map((t) => <small key={t} className="row" style={{ gap: 8, alignItems: 'flex-start' }}><Check size={15} style={{ flexShrink: 0, marginTop: 2 }} />{t}</small>)}
+        </div>
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="eyebrow">Depende de você</span>
+          {OWNER_TIPS.map((t) => <small key={t} className="row" style={{ gap: 8, alignItems: 'flex-start' }}><TriangleAlert size={15} style={{ flexShrink: 0, marginTop: 2 }} />{t}</small>)}
+        </div>
+      </div>
+      {officialAvailable && <small className="muted">Muitos clientes por dia? A conexão oficial da Meta não corre esse risco: desconecte o QR Code para ver essa opção.</small>}
+    </div>
+  );
+}
 
 function Connection() {
   const toast = useToast();
@@ -147,6 +188,8 @@ function Connection() {
           </div>
         </div>
       </div>}
+
+      {!official && <NumberProtection officialAvailable={Boolean(cloudConfig?.enabled)} />}
 
       {confirmDisconnect && (
         <ConfirmDialog

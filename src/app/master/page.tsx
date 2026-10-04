@@ -194,7 +194,7 @@ export default function MasterPage() {
     if (!removing) return;
     setBusy(true);
     try {
-      await adminApi.deleteCompany(removing.id);
+      await adminApi.deleteCompany(removing.id, removing.name);
       toast('Empresa excluída.');
       setRemoving(null);
       load();
@@ -296,6 +296,7 @@ export default function MasterPage() {
           title={`Excluir ${removing.name}?`}
           message="Todos os dados da empresa (clientes, serviços, agendamentos, conversas e a conexão do WhatsApp) serão apagados permanentemente. Para só bloquear o acesso, prefira desativar a empresa."
           confirmLabel="Excluir definitivamente"
+          typeToConfirm={removing.name}
           danger
           busy={busy}
           onConfirm={remove}

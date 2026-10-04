@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { ToastProvider } from '@/components/ui';
 import CookieBanner from '@/components/CookieBanner';
+import MaintenanceBanner from '@/components/MaintenanceBanner';
 
 const title = 'Sysora | Clientes, agenda e WhatsApp no automático';
 const description = 'Cadastro de clientes, serviços e agendamentos com um chatbot de WhatsApp que atende, agenda e lembra seus clientes sozinho.';
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ToastProvider>
             {children}
             <CookieBanner />
+            <MaintenanceBanner />
           </ToastProvider>
         </AuthProvider>
       </body>

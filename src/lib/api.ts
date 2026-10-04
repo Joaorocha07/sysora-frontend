@@ -223,10 +223,31 @@ function emitNotice(message: string) {
   else pendingNotice = message;
 }
 
+// Banco em manutenção (backend responde 503 DATABASE_NOT_READY, ver
+// lib/schemaGuard.ts no backend): mostra o aviso (MaintenanceBanner) e não
+// derruba a sessão de ninguém. Some sozinho na primeira resposta normal.
+const MAINTENANCE_CODE = 'DATABASE_NOT_READY';
+let maintenance = false;
+const maintenanceListeners = new Set<(on: boolean) => void>();
+export const isMaintenance = () => maintenance;
+export function subscribeMaintenance(fn: (on: boolean) => void) {
+  maintenanceListeners.add(fn);
+  return () => { maintenanceListeners.delete(fn); };
+}
+function setMaintenance(on: boolean) {
+  if (maintenance === on) return;
+  maintenance = on;
+  maintenanceListeners.forEach((fn) => fn(on));
+}
+const isMaintenanceError = (err: unknown) => err instanceof ApiError && err.code === MAINTENANCE_CODE;
+
 function silentRefresh(): Promise<Session | null> {
   refreshPromise ??= authApi.refresh()
     .then((session) => { onSessionChange?.(session); return session; })
-    .catch(() => { setAccessToken(null); onSessionChange?.(null); return null; })
+    .catch((err) => {
+      if (isMaintenanceError(err)) return null;
+      setAccessToken(null); onSessionChange?.(null); return null;
+    })
     .finally(() => { refreshPromise = null; });
   return refreshPromise;
 }
@@ -254,6 +275,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (res.status === 402) onSubscriptionBlocked?.();
   if (!res.ok) {
     const error = await parseError(res);
+    if (error.code === MAINTENANCE_CODE) setMaintenance(true);
     // Funcionário de empresa com o plano vencido:
     // - no login e na troca de empresa, o erro só aparece na tela;
     // - no refresh, não há outra empresa disponível: encerra a sessão e leva o aviso para o login;
@@ -270,6 +292,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     }
     throw error;
   }
+  setMaintenance(false);
   if (res.status === 204) return undefined as T;
   const data = (await res.json()) as T;
   const notice = (data as { notice?: unknown } | null)?.notice;
@@ -344,7 +367,8 @@ export const adminApi = {
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>
     send<{ adminAlreadyExisted: boolean }>('POST', '/admin/companies', input),
   updateCompany: (id: string, input: Partial<CompanyInput> & { active?: boolean }) => send('PATCH', `/admin/companies/${id}`, input),
-  deleteCompany: (id: string) => send('DELETE', `/admin/companies/${id}`),
+  // confirmName: nome da empresa digitado (trava do backend contra exclusão por engano).
+  deleteCompany: (id: string, confirmName: string) => send('DELETE', `/admin/companies/${id}`, { confirmName }),
   updateAccount: (accountId: string, input: AccountInput) =>
     send<{ subscription: Subscription }>('PATCH', `/admin/accounts/${accountId}`, input).then((r) => r.subscription),
   registerPayment: (accountId: string) =>

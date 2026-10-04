@@ -89,17 +89,27 @@ export function Modal({ title, description, onClose, children, footer, wide }: {
   );
 }
 
-export function ConfirmDialog({ title, message, confirmLabel = 'Confirmar', danger, busy, onConfirm, onClose }: {
+// typeToConfirm: para ações que apagam muitos dados, o botão só libera depois
+// que a pessoa digita esse texto (ex.: o nome da empresa).
+export function ConfirmDialog({ title, message, confirmLabel = 'Confirmar', danger, busy, onConfirm, onClose, typeToConfirm }: {
   title: string; message: ReactNode; confirmLabel?: string; danger?: boolean; busy?: boolean; onConfirm: () => void; onClose: () => void;
+  typeToConfirm?: string;
 }) {
+  const [typed, setTyped] = useState('');
+  const locked = Boolean(typeToConfirm) && typed.trim().toLowerCase() !== typeToConfirm!.trim().toLowerCase();
   return (
     <Modal title={title} onClose={onClose} footer={<>
       <button type="button" className="btn btn-ghost" onClick={onClose}>Voltar</button>
-      <button type="button" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} disabled={busy}>
+      <button type="button" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} disabled={busy || locked}>
         {busy && <span className="spinner" />}{confirmLabel}
       </button>
     </>}>
       <p className="muted">{message}</p>
+      {typeToConfirm && (
+        <Field label={`Para confirmar, digite: ${typeToConfirm}`}>
+          <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+        </Field>
+      )}
     </Modal>
   );
 }

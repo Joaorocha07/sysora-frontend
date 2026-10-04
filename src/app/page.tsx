@@ -78,10 +78,10 @@ export default function Landing() {
               <div className="mock-chat">
                 <div className="bubble">Oi! Queria marcar um horário</div>
                 <div className="bubble own">Olá, Ana! Bem-vinda. Como posso te ajudar?{'\n\n'}1) Agendar um horário{'\n'}2) Meus agendamentos{'\n'}3) Serviços e valores{'\n'}4) Falar com a equipe</div>
-                <div className="bubble">1</div>
-                <div className="bubble own">Próximos dias com horário livre:{'\n\n'}1) amanhã (quinta, 02/10){'\n'}2) sexta, 03/10{'\n'}3) sábado, 04/10</div>
-                <div className="bubble">2</div>
-                <div className="bubble own">Agendado! Consulta no dia 03/10 às 14:00. Até lá, Ana! ✅</div>
+                <div className="bubble">Quero agendar uma consulta</div>
+                <div className="bubble own">Próximos dias com horário livre:{'\n\n'}1) amanhã (quinta){'\n'}2) sexta-feira{'\n'}3) sábado</div>
+                <div className="bubble">Sexta às 14h dá certo?</div>
+                <div className="bubble own">Agendado! Sexta às 14:00. Até lá, Ana! ✅</div>
               </div>
             </div>
             <div className="mock-float">

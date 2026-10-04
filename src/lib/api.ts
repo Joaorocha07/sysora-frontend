@@ -290,8 +290,9 @@ function keep(session: Session): Session {
 // ============ Endpoints ============
 // Cadastro com e-mail e senha, ou com o googleToken do login com Google.
 type Credentials = { email: string; password: string } | { googleToken: string };
-export type RegisterCompanyInput = { plan: PlanId; companyName: string; name: string; phone?: string | null } & Credentials;
-export type RegisterEmployeeInput = { inviteCode: string; name: string; phone?: string | null } & Credentials;
+// acceptTerms: aceite dos Termos de Uso e da Política de Privacidade (LGPD), obrigatório no backend.
+export type RegisterCompanyInput = { plan: PlanId; companyName: string; name: string; phone?: string | null; acceptTerms: true } & Credentials;
+export type RegisterEmployeeInput = { inviteCode: string; name: string; phone?: string | null; acceptTerms: true } & Credentials;
 
 export const authApi = {
   signupConfig: () => get<{ companySignup: boolean }>('/auth/signup-config'),
@@ -347,6 +348,8 @@ export const adminApi = {
   registerPayment: (accountId: string) =>
     send<{ subscription: Subscription }>('POST', `/admin/accounts/${accountId}/payment`).then((r) => r.subscription),
   surveys: () => get<SurveySummary>('/admin/surveys'),
+  privacy: () => get<AdminPrivacy>('/admin/privacy/requests'),
+  resolvePrivacy: (id: string, response: string) => send('POST', `/admin/privacy/requests/${id}/resolve`, { response }),
   whatsapp: () => get<WhatsAppPlatformSetup>('/admin/whatsapp'),
   whatsappCheck: () => send<WhatsAppPlatformCheck>('POST', '/admin/whatsapp/check'),
   whatsappWebhook: () => send<WhatsAppPlatformCheck>('POST', '/admin/whatsapp/webhook'),
@@ -462,6 +465,19 @@ export type SurveyAnswers = {
   sources: string[]; sourceOther?: string | null; business: string; businessOther?: string | null;
   teamSize: string; features: string[]; featuresOther?: string | null; comment?: string | null;
 };
+// LGPD: consentimento de cookies e direitos do titular (Minha conta → Privacidade).
+export type PrivacyRequest = {
+  id: string; type: string; message: string | null; status: 'OPEN' | 'DONE'; response: string | null; createdAt: string; resolvedAt: string | null;
+};
+export const privacyApi = {
+  consent: (input: { consentId: string; analytics: boolean; marketing: boolean; policyVersion: string }) => send<void>('POST', '/privacy/consent', input),
+  exportMyData: () => get<Record<string, unknown>>('/privacy/me/export'),
+  requests: () => get<{ requests: PrivacyRequest[] }>('/privacy/requests').then((r) => r.requests),
+  createRequest: (type: string, message: string | null) => send<{ request: PrivacyRequest; alreadyOpen?: boolean }>('POST', '/privacy/requests', { type, message }),
+};
+export type AdminPrivacyRequest = PrivacyRequest & { dueAt: string; user: { name: string; email: string; companies: string[] } };
+export type AdminPrivacy = { requests: AdminPrivacyRequest[]; consents: { total: number; analytics: number; marketing: number } };
+
 export const surveyApi = {
   status: () => get<SurveyStatus>('/survey'),
   submit: (answers: SurveyAnswers) => send<{ status: 'done' }>('POST', '/survey', answers),

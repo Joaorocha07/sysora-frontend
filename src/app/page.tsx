@@ -4,6 +4,7 @@ import {
   ArrowRight, Bell, Bot, Building2, CalendarCheck, CalendarDays, Check, LayoutDashboard, MessageCircle,
   ShieldCheck, Sparkles, UserCog, Users, Wrench,
 } from 'lucide-react';
+import { LegalLinks } from '@/components/LegalLayout';
 import Logo from '@/components/Logo';
 import PlanCard from '@/components/PlanCard';
 import { PLANS, TRIAL_LABEL } from '@/lib/plans';
@@ -181,7 +182,10 @@ export default function Landing() {
             <span className="row"><ShieldCheck size={15} /> WhatsApp oficial</span>
             <span className="row"><LayoutDashboard size={15} /> Multiempresa</span>
           </div>
-          <span>© {new Date().getFullYear()} Sysora. Todos os direitos reservados.</span>
+          <span style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
+            <LegalLinks className="lp-legal" />
+            <span>© {new Date().getFullYear()} Sysora. Todos os direitos reservados.</span>
+          </span>
         </footer>
       </main>
     </div>

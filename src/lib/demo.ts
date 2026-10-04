@@ -561,6 +561,10 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   }
   if (path === '/whatsapp/ai') return { used: 0, limit: 1500, available: true, transcription: true, allowed: d.sub.ai };
   if (path === '/whatsapp/flow/understand') return demoUnderstand(body as { flow: FlowNode; text: string });
+  if (path === '/privacy/consent') return undefined;
+  if (path === '/privacy/requests' && method === 'GET') return { requests: [] };
+  if (path === '/privacy/requests') return { request: { id: id(), type: (body as { type: string }).type, message: null, status: 'OPEN', response: null, createdAt: new Date().toISOString(), resolvedAt: null } };
+  if (path === '/privacy/me/export') return { generatedAt: new Date().toISOString(), note: 'Demonstração: dados fictícios.', account: { name: 'Você (demonstração)' } };
   if (path === '/survey' && method === 'GET') return { eligible: false, status: 'done' };
   if (path.startsWith('/survey')) return { status: 'done' };
   if (path === '/whatsapp/simulate') return demoSimulate(body as { simId: string | null; text: string; flow: FlowNode; profileName?: string });

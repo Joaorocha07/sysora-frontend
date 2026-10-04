@@ -17,6 +17,7 @@ const MASTER_NAV = [
   { href: '/master/ia', label: 'IA (Sora)', icon: Sparkles },
   { href: '/master/whatsapp', label: 'WhatsApp oficial', icon: MessageCircle },
   { href: '/master/pesquisas', label: 'Pesquisa inicial', icon: ClipboardList },
+  { href: '/master/privacidade', label: 'Privacidade (LGPD)', icon: ShieldCheck },
   { href: '/master/configuracoes', label: 'Configurações', icon: Settings },
 ];
 

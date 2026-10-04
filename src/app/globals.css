@@ -138,6 +138,44 @@ small { font-size: 12px; color: var(--muted); }
 .input-icon { position: relative; }
 .input-icon > svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
 .input-icon > .input { padding-left: 44px; }
+/* Aviso de cookies (LGPD), fixo no rodapé até a pessoa escolher. */
+.cookie-banner {
+  position: fixed; z-index: 90; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  width: min(980px, calc(100% - 32px)); display: flex; align-items: center; gap: 16px;
+  padding: 16px 18px; border-radius: var(--radius-lg); border: 1px solid var(--line-strong);
+  background: var(--surface); box-shadow: var(--shadow-lg); animation: rise .3s ease;
+}
+.cookie-banner p { flex: 1; margin: 0; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+.cookie-banner a { color: var(--ink); font-weight: 600; text-decoration: underline; }
+.cookie-banner-icon { flex: none; color: var(--ink); }
+.cookie-banner-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 760px) {
+  .cookie-banner { flex-direction: column; align-items: stretch; gap: 12px; }
+  .cookie-banner-icon { display: none; }
+  .cookie-banner-actions .btn { flex: 1; }
+}
+/* Links legais nos rodapés (página inicial e telas de entrada). */
+.lp-legal a, .lp-legal button, .auth-legal a, .auth-legal button { color: inherit; background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.lp-legal a:hover, .lp-legal button:hover, .auth-legal a:hover, .auth-legal button:hover { color: var(--ink); }
+.auth-legal a:hover, .auth-legal button:hover { color: #fff; }
+/* Páginas legais (/privacidade, /termos, /cookies). */
+.legal { width: min(860px, 100%); margin: 0 auto; padding: 32px 24px 80px; }
+.legal-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 36px; }
+.legal-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 30px; }
+.legal article .legal-nav a { text-decoration: none; }
+.legal article { line-height: 1.75; color: var(--ink-2); font-size: 15px; }
+.legal article h1 { color: var(--ink); font-size: clamp(30px, 5vw, 42px); line-height: 1.1; margin-bottom: 8px; }
+.legal article h2 { color: var(--ink); font-size: 20px; margin: 34px 0 10px; }
+.legal article h3 { color: var(--ink); font-size: 16px; margin: 22px 0 6px; }
+.legal article p, .legal article ul { margin: 0 0 12px; }
+.legal article ul { padding-left: 20px; }
+.legal article li { margin-bottom: 6px; }
+.legal article a { color: var(--ink); text-decoration: underline; }
+.legal-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 16px; }
+.legal-table th, .legal-table td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.legal-table th { color: var(--ink); font-weight: 700; background: var(--surface-2); }
+.legal-footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); }
+.legal-footer a, .legal-footer button { color: var(--muted); background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; }
 /* Dica de erro embaixo de um campo (ex.: CPF/CNPJ inválido). */
 .field-error { color: #d97706; font-weight: 600; }
 .input[aria-invalid='true'] { border-color: #d97706; }

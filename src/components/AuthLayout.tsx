@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { Bot, CalendarCheck, Users, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { LegalLinks } from './LegalLayout';
 import Logo from './Logo';
 import ThemeToggle from './ThemeToggle';
 
@@ -31,7 +32,10 @@ export default function AuthLayout({ children, side = DEFAULT_SIDE }: { children
             {side.items.map(({ icon: Icon, text }) => <li key={text}><span><Icon size={15} /></span>{text}</li>)}
           </ul>
         </div>
-        <small style={{ color: '#5c5c5c' }}>© {new Date().getFullYear()} Sysora</small>
+        <small className="auth-legal" style={{ color: '#5c5c5c', display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          <span>© {new Date().getFullYear()} Sysora</span>
+          <LegalLinks />
+        </small>
       </aside>
       <main className="auth-main">
         <div style={{ position: 'fixed', top: 20, right: 20 }}><ThemeToggle /></div>

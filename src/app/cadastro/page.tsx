@@ -47,6 +47,19 @@ function PasswordFields({ password, confirm, onPassword, onConfirm }: { password
   );
 }
 
+// Aceite obrigatório (LGPD): fica registrado no cadastro com a versão dos documentos.
+function TermsCheckbox({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+  const link = { color: 'var(--ink)', fontWeight: 600, textDecoration: 'underline' } as const;
+  return (
+    <label className="row" style={{ alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
+      <input type="checkbox" required checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 3 }} />
+      <span className="muted">
+        Li e aceito os <Link href="/termos" target="_blank" style={link}>Termos de Uso</Link> e a <Link href="/privacidade" target="_blank" style={link}>Política de Privacidade</Link> da Sysora.
+      </span>
+    </label>
+  );
+}
+
 // Dono de empresa: começa o teste grátis (plano Inicial) já logado. O plano é
 // escolhido depois, em Assinatura.
 function CompanyForm({ google, onDropGoogle }: GoogleProps) {
@@ -67,7 +80,7 @@ function CompanyForm({ google, onDropGoogle }: GoogleProps) {
     setError(null);
     setBusy(true);
     try {
-      const session = await registerCompany({ plan: 'INICIAL', companyName: form.companyName, name: form.name, phone: form.phone || null, ...credentialsFor(google, form) });
+      const session = await registerCompany({ plan: 'INICIAL', acceptTerms: true, companyName: form.companyName, name: form.name, phone: form.phone || null, ...credentialsFor(google, form) });
       clearGoogleSignup();
       router.replace(homeFor(session));
     } catch (err) {
@@ -102,10 +115,7 @@ function CompanyForm({ google, onDropGoogle }: GoogleProps) {
           <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />
         </>
       )}
-      <label className="row" style={{ alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
-        <input type="checkbox" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} style={{ marginTop: 3 }} />
-        <span className="muted">Li e aceito os termos de uso e a política de privacidade da Sysora.</span>
-      </label>
+      <TermsCheckbox checked={accepted} onChange={setAccepted} />
       <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
         {busy ? <span className="spinner" /> : <>Começar teste grátis <ArrowRight size={17} /></>}
       </button>
@@ -122,6 +132,7 @@ function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: stri
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState(false);
   const set = (key: keyof typeof form) => (value: string) => setForm((f) => ({ ...f, [key]: key === 'phone' ? maskPhone(value) : key === 'inviteCode' ? value.toUpperCase() : value }));
 
   // Mostra o nome da empresa assim que o código fica completo.
@@ -144,7 +155,7 @@ function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: stri
     setError(null);
     setBusy(true);
     try {
-      const result = await authApi.registerEmployee({ inviteCode: form.inviteCode, name: form.name, phone: form.phone || null, ...credentialsFor(google, form) });
+      const result = await authApi.registerEmployee({ acceptTerms: true, inviteCode: form.inviteCode, name: form.name, phone: form.phone || null, ...credentialsFor(google, form) });
       clearGoogleSignup();
       setDone(result.message);
     } catch (err) {
@@ -189,6 +200,7 @@ function EmployeeForm({ initialCode, google, onDropGoogle }: { initialCode: stri
           <PasswordFields password={form.password} confirm={form.confirm} onPassword={set('password')} onConfirm={set('confirm')} />
         </>
       )}
+      <TermsCheckbox checked={accepted} onChange={setAccepted} />
       <button className="btn btn-primary btn-lg btn-block" disabled={busy || company === ''}>
         {busy ? <span className="spinner" /> : 'Pedir acesso'}
       </button>

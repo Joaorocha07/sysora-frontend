@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { Building2, Clock, KeyRound, Save } from 'lucide-react';
 import AccountForm from '@/components/AccountForm';
+import PrivacyCard from '@/components/PrivacyCard';
 import MyTeams from '@/components/MyTeams';
 import { Field, FormError, Loading, PageHead, Switch, useToast, DocumentInput } from '@/components/ui';
 import { errorMessage, settingsApi, type CompanyProfile, type Settings } from '@/lib/api';
@@ -137,7 +138,7 @@ function SettingsPage() {
           </button>
         ))}
       </div>
-      {tab === 'conta' ? <><AccountForm /><MyTeams /></> : !data ? <Loading /> : tab === 'empresa'
+      {tab === 'conta' ? <><AccountForm /><MyTeams /><PrivacyCard /></> : !data ? <Loading /> : tab === 'empresa'
         ? <CompanyForm company={data.company} onSaved={(company) => setData({ ...data, company })} />
         : <HoursForm settings={data.settings} onSaved={(settings) => setData({ ...data, settings })} />}
     </>

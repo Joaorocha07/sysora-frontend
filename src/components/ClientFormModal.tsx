@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Field, FormError, Modal, Switch } from './ui';
-import { clientsApi, errorMessage, type Client } from '@/lib/api';
+import { clientsApi, emailCodesApi, errorMessage, type Client, type EmailInbox } from '@/lib/api';
 import { maskPhone } from '@/lib/format';
 
 export default function ClientFormModal({ client, onClose, onSaved }: {
@@ -16,6 +16,16 @@ export default function ClientFormModal({ client, onClose, onSaved }: {
     notes: client?.notes ?? '',
   });
   const [reminders, setReminders] = useState(!client?.whatsappOptOutAt);
+  // Códigos por e-mail (só nas empresas liberadas): caixas que o cliente pode usar.
+  const [inboxes, setInboxes] = useState<EmailInbox[] | null>(null);
+  const [inboxIds, setInboxIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    emailCodesApi.list().then(({ inboxes: list }) => {
+      setInboxes(list);
+      if (client) setInboxIds(new Set(list.filter((i) => i.clientIds.includes(client.id)).map((i) => i.id)));
+    }).catch(() => setInboxes(null));
+  }, [client]);
+  const toggleInbox = (id: string) => setInboxIds((s) => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -28,6 +38,7 @@ export default function ClientFormModal({ client, onClose, onSaved }: {
     try {
       const input = { ...form, email: form.email || null, birthday: form.birthday || null, notes: form.notes || null, reminders };
       const saved = client ? await clientsApi.update(client.id, input) : await clientsApi.create(input);
+      if (inboxes?.length) await emailCodesApi.setClientInboxes(saved.id, [...inboxIds]);
       onSaved(saved);
     } catch (err) {
       setError(errorMessage(err));
@@ -64,6 +75,20 @@ export default function ClientFormModal({ client, onClose, onSaved }: {
             ? `O cliente respondeu PARAR em ${new Date(client.whatsappOptOutAt).toLocaleDateString('pt-BR')}. Só reative se ele pedir.`
             : 'Desligado, o bot continua atendendo, mas não envia lembretes a este cliente.'}
         />
+        {inboxes && inboxes.length > 0 && (
+          <div className="field">
+            <span>Códigos por e-mail liberados</span>
+            <div className="stack" style={{ gap: 6 }}>
+              {inboxes.map((i) => (
+                <label key={i.id} className="row" style={{ gap: 10, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={inboxIds.has(i.id)} onChange={() => toggleInbox(i.id)} />
+                  <span>{i.label}</span><small className="muted">{i.email}</small>
+                </label>
+              ))}
+            </div>
+            <small>O cliente recebe no WhatsApp o código dessas contas quando pedir.</small>
+          </div>
+        )}
       </form>
     </Modal>
   );

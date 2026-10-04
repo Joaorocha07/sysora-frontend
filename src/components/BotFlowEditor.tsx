@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
-  ArrowDown, ArrowUp, CalendarDays, Clock, CornerDownLeft, Flag, Hand, ListTree, MessageSquare, PenLine, Play, Plus, RotateCcw, Save, Send,
+  ArrowDown, ArrowUp, CalendarDays, Clock, CornerDownLeft, Flag, Hand, ImageOff, KeyRound, ListTree, MessageSquare, PenLine, Play, Plus, RotateCcw, Save, Send,
   Sparkles, Tag, Trash2, TriangleAlert, Undo2, Zap,
 } from 'lucide-react';
 import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui';
@@ -41,6 +41,8 @@ const ACTIONS: Record<FlowAction, { label: string; flow: string; sample: string 
   meus: { label: 'Meus agendamentos', flow: 'Confirmar, remarcar ou cancelar', sample: 'Seu próximo horário: Corte na sexta, 10/10 às 14:00.\n\n1) Confirmar presença\n2) Remarcar\n3) Cancelar' },
   servicos: { label: 'Serviços e valores', flow: 'Lista serviços e produtos com preços', sample: 'Nossos serviços:\n\n• Corte: R$ 50,00 (30 min)\n…' },
   equipe: { label: 'Falar com a equipe', flow: 'Bot pausa e a equipe assume', sample: '(mensagem de transferência da aba Atendimento humano)' },
+  codigo: { label: 'Receber código de acesso', flow: 'Busca o código no e-mail liberado para o cliente', sample: 'Seu código:\n\n*482913*\n(recebido às 14:32)' },
+  trocar: { label: 'Não consigo gerar imagem', flow: 'Troca o cliente para outra conta e manda o código', sample: 'Troquei a sua conta. Seu acesso continua até 03/11/2026.\n\nSua nova conta é:\n*conta@gmail.com*' },
 };
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -153,6 +155,25 @@ export function BotFlowEditor() {
   const vars = useMemo<Vars>(() => ({ nome: 'Maria', empresa: company?.name ?? 'Sua empresa' }), [company?.name]);
 
   const dirty = Boolean(flow && saved) && JSON.stringify(flow) !== JSON.stringify(saved);
+  // Fluxo mudado em outro lugar (outra aba, outra pessoa): ao voltar para a
+  // tela sem alterações pendentes, recarrega o salvo, para o editor e o teste
+  // serem fiéis ao que o WhatsApp usa.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || dirtyRef.current) return;
+      whatsappApi.flow().then((r) => {
+        if (dirtyRef.current) return;
+        setSaved((prev) => (JSON.stringify(prev) === JSON.stringify(r.flow) ? prev : r.flow));
+        setFlow((prev) => (JSON.stringify(prev) === JSON.stringify(r.flow) ? prev : r.flow));
+        setCustom(r.custom);
+      }).catch(() => {});
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, []);
   // Inclui o rascunho da Sora: sair sem salvar pede confirmação (UnsavedChanges).
   const saveRef = useRef<() => Promise<boolean>>(async () => true);
   useUnsavedChanges(dirty, () => saveRef.current());
@@ -247,7 +268,7 @@ export function BotFlowEditor() {
         <div className="card flow-canvas">
           <FlowBranch node={flow} index={null} isRoot depth={0} data={data} onEdit={setEditing} onAdd={addOption} />
         </div>
-        <Simulator key={JSON.stringify(flow)} root={flow} vars={vars} ai={ai} />
+        <Simulator key={JSON.stringify(flow)} root={flow} draft={dirty} vars={vars} ai={ai} />
       </div>
 
       {dirty && (
@@ -265,6 +286,7 @@ export function BotFlowEditor() {
           parent={editTarget.parent}
           depth={editTarget.depth}
           vars={vars}
+          codesEnabled={Boolean(data.settings?.emailCodesEnabled)}
           onClose={() => setEditing(null)}
           onApply={(next) => { setFlow((f) => f && mapTree(f, next.id, () => next)); setEditing(null); }}
           onRemove={() => {
@@ -418,6 +440,23 @@ function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
       </div>
     );
   }
+  if (action === 'trocar') {
+    return (
+      <div className="flow-data">
+        <strong><ImageOff size={13} />Troca de conta</strong>
+        <span>Passa o cliente para a conta com menos clientes, mantém o vencimento e atualiza a agenda.</span>
+      </div>
+    );
+  }
+  if (action === 'codigo') {
+    return (
+      <div className="flow-data">
+        <strong><KeyRound size={13} />Código mais recente do e-mail</strong>
+        <span>Só para clientes com acesso liberado à caixa de e-mail.</span>
+        <span>Configure na aba Códigos por e-mail.</span>
+      </div>
+    );
+  }
   return (
     <div className="flow-data">
       <strong><Hand size={13} />Bot pausa, equipe assume</strong>
@@ -533,8 +572,8 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
   );
 }
 
-function NodeEditor({ root, node, parent, depth, vars, onClose, onApply, onRemove, onMove }: {
-  root: FlowNode; node: FlowNode; parent: FlowNode | null; depth: number; vars: Vars;
+function NodeEditor({ root, node, parent, depth, vars, codesEnabled, onClose, onApply, onRemove, onMove }: {
+  root: FlowNode; node: FlowNode; parent: FlowNode | null; depth: number; vars: Vars; codesEnabled: boolean;
   onClose: () => void; onApply: (node: FlowNode) => void; onRemove: () => void; onMove: (dir: -1 | 1) => void;
 }) {
   const [draft, setDraft] = useState<FlowNode>(node);
@@ -605,7 +644,7 @@ function NodeEditor({ root, node, parent, depth, vars, onClose, onApply, onRemov
           {draft.type === 'action' && (
             <Field label="Função">
               <select className="select" value={draft.action ?? 'agendar'} onChange={(e) => set({ action: e.target.value as FlowAction })}>
-                {(Object.keys(ACTIONS) as FlowAction[]).map((a) => <option key={a} value={a}>{ACTIONS[a].label} — {ACTIONS[a].flow}</option>)}
+                {(Object.keys(ACTIONS) as FlowAction[]).filter((a) => !['codigo', 'trocar'].includes(a) || codesEnabled || draft.action === a).map((a) => <option key={a} value={a}>{ACTIONS[a].label} — {ACTIONS[a].flow}</option>)}
               </select>
             </Field>
           )}
@@ -672,7 +711,9 @@ function quickReplies(text: string): { value: string; label: string }[] {
   return [...text.matchAll(/^(\d{1,2})\) (.+)$/gm)].map((m) => ({ value: m[1], label: `${m[1]}) ${m[2]}` }));
 }
 
-function Simulator({ root, vars, ai }: { root: FlowNode; vars: Vars; ai: boolean }) {
+// draft: há alterações não salvas. Só então o teste usa o fluxo desta tela;
+// sem elas, o backend usa o fluxo salvo, exatamente o do WhatsApp.
+function Simulator({ root, draft, vars, ai }: { root: FlowNode; draft: boolean; vars: Vars; ai: boolean }) {
   const [simId, setSimId] = useState<string | null>(null);
   const [chat, setChat] = useState<SimTurn[]>([]);
   const [typed, setTyped] = useState('');
@@ -689,7 +730,7 @@ function Simulator({ root, vars, ai }: { root: FlowNode; vars: Vars; ai: boolean
     setSending(true);
     setChat((c) => [...c, { own: message, bubbles: [] }]);
     try {
-      const r = await whatsappApi.simulate({ simId, text: message, flow: clean(root), profileName: vars.nome });
+      const r = await whatsappApi.simulate({ simId, text: message, ...(draft ? { flow: clean(root) } : {}), profileName: vars.nome });
       setSimId(r.simId);
       const bubbles: Bubble[] = r.inactive
         ? [{ text: 'A assinatura da empresa não está ativa: no WhatsApp, o bot não responde os clientes.', system: true }]
@@ -725,7 +766,11 @@ function Simulator({ root, vars, ai }: { root: FlowNode; vars: Vars; ai: boolean
         <strong><Play size={14} style={{ verticalAlign: -2 }} /> Testar conversa</strong>
         <button type="button" className="btn btn-ghost btn-sm" onClick={restart} disabled={sending}><RotateCcw size={13} />Recomeçar</button>
       </div>
-      <small className="muted">É o bot de verdade, com este fluxo, o catálogo e a agenda. Nada é salvo e nenhuma mensagem é enviada.</small>
+      <small className="muted">
+        É o bot de verdade, com o catálogo, a agenda e as regras do seu plano. Nada é salvo e nenhuma mensagem é enviada.
+        {' '}<strong>{draft ? 'Testando o rascunho (alterações ainda não salvas).' : 'Testando o fluxo salvo, igual ao WhatsApp.'}</strong>
+        {' '}{ai ? 'IA ligada: entende mensagens escritas livremente.' : 'Sem IA no seu plano: o bot entende números e palavras-chave.'}
+      </small>
       <div className="phone-preview flow-sim-chat" ref={chatRef}>
         {!chat.length && <div className="flow-system">Mande uma mensagem como se fosse o cliente (ex.: “oi”).</div>}
         {chat.map((turn, i) => (

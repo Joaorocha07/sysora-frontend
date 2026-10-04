@@ -52,6 +52,8 @@ export type ServiceKind = 'SERVICE' | 'PRODUCT';
 export type Service = {
   id: string; kind: ServiceKind; name: string; description: string | null; durationMinutes: number; priceCents: number;
   active: boolean; position: number; _count?: { appointments: number };
+  // Produto que é conta de acesso (códigos por e-mail): o bot entrega o código dela.
+  accessEmail?: string | null;
 };
 
 export type AppointmentItem = { id: string; serviceId: string | null; kind: ServiceKind; name: string; durationMinutes: number; priceCents: number };
@@ -76,6 +78,8 @@ export type Settings = {
   openingTime: string; closingTime: string; workDays: number[]; slotMinutes: number; slotCapacity: number;
   lunchEnabled: boolean; lunchStart: string; lunchEnd: string;
   whatsappConnected: boolean; whatsappPhone: string | null;
+  // "Receber código" (códigos por e-mail): liberado pelo admin master.
+  emailCodesEnabled?: boolean;
   botEnabled: boolean; autoCreateClient: boolean; askName: boolean; botAiEnabled: boolean; transcribeAudio: boolean;
   greetingMessage: string; handoffMessage: string; confirmationMessage: string;
   reminderEnabled: boolean; reminderTime: string; reminderMessage: string;
@@ -111,7 +115,7 @@ export type WhatsAppUsage = {
 };
 
 // Fluxo do chatbot (aba "Fluxo do bot"): árvore de menus a partir das boas-vindas.
-export type FlowAction = 'agendar' | 'meus' | 'servicos' | 'equipe';
+export type FlowAction = 'agendar' | 'meus' | 'servicos' | 'equipe' | 'codigo' | 'trocar';
 export type FlowNodeType = 'menu' | 'message' | 'action' | 'end';
 export type FlowNode = {
   id: string; label: string; type: FlowNodeType; messages: string[]; together: boolean;
@@ -138,6 +142,7 @@ export type Dashboard = {
 export type AdminCompany = {
   id: string; name: string; slug: string; document: string | null; phone: string | null; email: string | null;
   subscription: Subscription; active: boolean; selfSignup: boolean; inviteCode: string; createdAt: string; whatsappConnected: boolean; whatsappPhone: string | null;
+  emailCodesEnabled?: boolean;
   users: number; admins: { id: string; name: string; email: string; avatarUrl: string | null }[]; clients: number; appointments: number; services: number;
 };
 // Pessoa cadastrada na Sysora (painel master > Usuários).
@@ -366,7 +371,7 @@ export const adminApi = {
   companies: () => get<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies),
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>
     send<{ adminAlreadyExisted: boolean }>('POST', '/admin/companies', input),
-  updateCompany: (id: string, input: Partial<CompanyInput> & { active?: boolean }) => send('PATCH', `/admin/companies/${id}`, input),
+  updateCompany: (id: string, input: Partial<CompanyInput> & { active?: boolean; emailCodesEnabled?: boolean }) => send('PATCH', `/admin/companies/${id}`, input),
   // confirmName: nome da empresa digitado (trava do backend contra exclusão por engano).
   deleteCompany: (id: string, confirmName: string) => send('DELETE', `/admin/companies/${id}`, { confirmName }),
   updateAccount: (accountId: string, input: AccountInput) =>
@@ -435,6 +440,23 @@ export const usersApi = {
   reject: (membershipId: string) => send('POST', `/users/${membershipId}/reject`),
 };
 
+// Caixa de e-mail de onde o bot tira os códigos (aba Códigos por e-mail).
+export type EmailInbox = {
+  id: string; label: string; email: string; senders: string; active: boolean; lastError: string | null; createdAt: string; clientIds: string[];
+};
+export type FoundEmailCode = { code: string | null; link: string | null; subject: string; from: string; receivedAt: string };
+export type EmailInboxInput = { label: string; email: string; appPassword: string; senders?: string };
+export const emailCodesApi = {
+  list: () => send<{ inboxes: EmailInbox[]; defaultSenders: string; windowMinutes: number }>('GET', '/email-codes'),
+  create: (input: EmailInboxInput) => send<{ inbox: EmailInbox }>('POST', '/email-codes', input).then((r) => r.inbox),
+  update: (id: string, input: Partial<Omit<EmailInboxInput, 'email'>> & { active?: boolean }) =>
+    send<{ inbox: EmailInbox }>('PATCH', `/email-codes/${id}`, input).then((r) => r.inbox),
+  remove: (id: string) => send('DELETE', `/email-codes/${id}`),
+  test: (id: string) => send<{ found: FoundEmailCode | null }>('POST', `/email-codes/${id}/test`).then((r) => r.found),
+  setInboxClients: (id: string, ids: string[]) => send<{ inbox: EmailInbox }>('PUT', `/email-codes/${id}/clients`, { ids }).then((r) => r.inbox),
+  setClientInboxes: (clientId: string, ids: string[]) => send('PUT', `/email-codes/clients/${clientId}`, { ids }),
+};
+
 export type ClientInput = { name: string; phone: string; email?: string | null; birthday?: string | null; notes?: string | null; reminders?: boolean };
 export const clientsApi = {
   list: (search?: string) => get<{ clients: Client[] }>(`/clients${qs({ search })}`).then((r) => r.clients),
@@ -444,7 +466,7 @@ export const clientsApi = {
   remove: (id: string) => send('DELETE', `/clients/${id}`),
 };
 
-export type ServiceInput = { kind?: ServiceKind; name: string; description?: string | null; durationMinutes: number; priceCents: number; active?: boolean; position?: number };
+export type ServiceInput = { kind?: ServiceKind; name: string; description?: string | null; durationMinutes: number; priceCents: number; active?: boolean; position?: number; accessEmail?: string | null };
 export const servicesApi = {
   list: () => get<{ services: Service[] }>('/services').then((r) => r.services),
   create: (input: ServiceInput) => send<{ service: Service }>('POST', '/services', input).then((r) => r.service),
@@ -544,6 +566,7 @@ export const whatsappApi = {
   ai: () => get<BotAiStatus>('/whatsapp/ai'),
   understand: (flow: FlowNode, text: string, nodeId?: string) => send<BotAiUnderstood>('POST', '/whatsapp/flow/understand', { flow, text, nodeId }),
   // Conversa com o bot de verdade, sem gravar nem enviar nada (ver whatsapp.simulator.ts).
-  simulate: (input: { simId: string | null; text: string; flow: FlowNode; profileName?: string }) =>
+  // Sem flow, o backend usa o fluxo salvo (o mesmo do WhatsApp).
+  simulate: (input: { simId: string | null; text: string; flow?: FlowNode; profileName?: string }) =>
     send<{ simId: string; replies: string[]; step: string | null; inactive: boolean }>('POST', '/whatsapp/simulate', input),
 };

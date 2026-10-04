@@ -2,9 +2,10 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Bot, Check, Headset, Link2Off, MessageSquareText, QrCode, RefreshCw, Save, Send, ShieldCheck, Smartphone, TriangleAlert, Workflow } from 'lucide-react';
+import { Bell, Bot, Check, Headset, KeyRound, Link2Off, MessageSquareText, QrCode, RefreshCw, Save, Send, ShieldCheck, Smartphone, TriangleAlert, Workflow } from 'lucide-react';
 import { useShell } from '@/components/AppShell';
 import { BotFlowEditor } from '@/components/BotFlowEditor';
+import { EmailCodes } from '@/components/EmailCodes';
 import { ConfirmDialog, Field, Loading, PageHead, Switch, useToast } from '@/components/ui';
 import { useConfirmLeave, useUnsavedChanges } from '@/components/UnsavedChanges';
 import { AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
@@ -13,7 +14,7 @@ import { errorMessage, settingsApi, whatsappApi, type BotAiStatus, type Settings
 import { useAuth } from '@/lib/auth';
 import { duration } from '@/lib/format';
 
-type Tab = 'conexao' | 'bot' | 'fluxo' | 'lembretes' | 'equipe';
+type Tab = 'conexao' | 'bot' | 'fluxo' | 'lembretes' | 'equipe' | 'codigos';
 
 const TABS: { id: Tab; label: string; icon: typeof Bot }[] = [
   { id: 'conexao', label: 'Conexão', icon: QrCode },
@@ -21,6 +22,8 @@ const TABS: { id: Tab; label: string; icon: typeof Bot }[] = [
   { id: 'fluxo', label: 'Fluxo do bot', icon: Workflow },
   { id: 'lembretes', label: 'Lembretes', icon: Bell },
   { id: 'equipe', label: 'Atendimento humano', icon: Headset },
+  // Só nas empresas liberadas pelo admin master (settings.emailCodesEnabled).
+  { id: 'codigos', label: 'Códigos por e-mail', icon: KeyRound },
 ];
 
 const VARS = '{nome}, {empresa}, {servico}, {data} e {hora}';
@@ -208,7 +211,7 @@ function Connection() {
   );
 }
 
-function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo'>; onOpenFlow: () => void }) {
+function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo' | 'codigos'>; onOpenFlow: () => void }) {
   const toast = useToast();
   const [saved, setSaved] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
@@ -336,6 +339,8 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
 export default function WhatsAppPage() {
   const { company } = useAuth();
   const [tab, setTab] = useState<Tab>('conexao');
+  const [codesEnabled, setCodesEnabled] = useState(false);
+  useEffect(() => { settingsApi.get().then((r) => setCodesEnabled(Boolean(r.settings.emailCodesEnabled))).catch(() => {}); }, []);
   const confirmLeave = useConfirmLeave();
   // Trocar de aba descarta o rascunho da aba atual: pergunta antes, se houver.
   const openTab = (next: Tab) => { if (next !== tab) confirmLeave(() => setTab(next)); };
@@ -348,12 +353,12 @@ export default function WhatsAppPage() {
         text={`Conecte o número de ${company?.name ?? 'sua empresa'} e defina como o bot conversa com seus clientes.`}
       />
       <div className="tabs">
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {TABS.filter((t) => t.id !== 'codigos' || codesEnabled).map(({ id, label, icon: Icon }) => (
           <button key={id} type="button" className={tab === id ? 'on' : ''} onClick={() => openTab(id)}><Icon size={15} style={{ verticalAlign: -3, marginRight: 6 }} />{label}</button>
         ))}
       </div>
-      {tab === 'conexao' ? <Connection /> : tab === 'fluxo' ? <BotFlowEditor /> : <BotSettings key={tab} tab={tab} onOpenFlow={() => openTab('fluxo')} />}
-      {tab !== 'conexao' && (
+      {tab === 'conexao' ? <Connection /> : tab === 'fluxo' ? <BotFlowEditor /> : tab === 'codigos' ? <EmailCodes onOpenFlow={() => openTab('fluxo')} /> : <BotSettings key={tab} tab={tab} onOpenFlow={() => openTab('fluxo')} />}
+      {tab !== 'conexao' && tab !== 'codigos' && (
         <p className="hint" style={{ marginTop: 14 }}><MessageSquareText size={13} style={{ verticalAlign: -2 }} /> Os horários de atendimento que o bot oferece ficam em Configurações → Horários.</p>
       )}
     </>

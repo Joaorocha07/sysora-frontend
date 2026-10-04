@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Clock, Package, Pencil, Plus, Sparkles, Tags, Trash2, Undo2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clock, KeyRound, Package, Pencil, Plus, Sparkles, Tags, Trash2, Undo2 } from 'lucide-react';
 import { ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToast } from '@/components/ui';
-import { errorMessage, servicesApi, type Service, type ServiceKind } from '@/lib/api';
+import { errorMessage, servicesApi, settingsApi, type Service, type ServiceKind } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AiPlanBadge, useAiPlan } from '@/components/AiPlanLock';
 import { centsToMoneyInput, duration, maskMoney, money, parseMoney } from '@/lib/format';
@@ -30,6 +30,10 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
   const [minutes, setMinutes] = useState(service?.durationMinutes || 60);
   const [price, setPrice] = useState(service ? centsToMoneyInput(service.priceCents) : '');
   const [active, setActive] = useState(service?.active ?? true);
+  // Conta de acesso (códigos por e-mail): só nas empresas com o recurso liberado.
+  const [accessEmail, setAccessEmail] = useState(service?.accessEmail ?? '');
+  const [codesEnabled, setCodesEnabled] = useState(Boolean(service?.accessEmail));
+  useEffect(() => { settingsApi.get().then((r) => { if (r.settings.emailCodesEnabled) setCodesEnabled(true); }).catch(() => {}); }, []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [improving, setImproving] = useState(false);
@@ -58,7 +62,7 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
     setError(null);
     setBusy(true);
     try {
-      const input = { kind, name, description: description || null, durationMinutes: product ? 0 : Number(minutes), priceCents: parseMoney(price), active };
+      const input = { kind, name, description: description || null, durationMinutes: product ? 0 : Number(minutes), priceCents: parseMoney(price), active, ...(codesEnabled ? { accessEmail: product ? accessEmail.trim() || null : null } : {}) };
       if (service) await servicesApi.update(service.id, input);
       else await servicesApi.create(input);
       onSaved();
@@ -91,6 +95,11 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
         <Field label={product ? 'Nome do produto' : 'Nome do serviço'}>
           <input className="input" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder={product ? 'Ex.: Pomada modeladora, Shampoo, Óleo para barba' : 'Ex.: Consulta, Corte, Aula experimental'} />
         </Field>
+        {product && codesEnabled && (
+          <Field label="E-mail de acesso (opcional)" hint="Preencha se este produto é uma conta (ex.: ChatGPT). O cliente pede o código no WhatsApp, o bot acha a conta por este e-mail e entrega o código que chegar nele. Não aparece na lista de produtos.">
+            <input className="input" type="email" value={accessEmail} onChange={(e) => setAccessEmail(e.target.value)} placeholder="conta@gmail.com" />
+          </Field>
+        )}
         <div className="stack" style={{ gap: 8 }}>
           <Field label="Descrição (opcional)" hint={`Aparece para o cliente quando ele pede a lista de ${product ? 'produtos' : 'serviços'} no WhatsApp.`}>
             <textarea className="textarea" maxLength={300} style={{ minHeight: 72 }} value={description} disabled={improving} onChange={(e) => { setDescription(e.target.value); setBeforeAi(null); }} />
@@ -245,6 +254,7 @@ export default function ServicosPage() {
                       <strong>{s.name}</strong>
                       {s.kind === 'PRODUCT' && <span className="badge plain soft" style={{ marginLeft: 8 }}><Package size={12} />Produto</span>}
                       {s.description && <small style={{ display: 'block', maxWidth: 380 }}>{s.description}</small>}
+                      {s.accessEmail && <small className="muted" style={{ display: 'block' }}><KeyRound size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Conta de acesso: {s.accessEmail}</small>}
                     </td>
                     <td>
                       {s.kind === 'PRODUCT'

@@ -95,6 +95,7 @@ function NewCompanyModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
 function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany; onClose: () => void; onSaved: (message: string) => void }) {
   const [form, setForm] = useState({ name: company.name, document: company.document ?? '', phone: company.phone ?? '', email: company.email ?? '' });
   const [active, setActive] = useState(company.active);
+  const [emailCodes, setEmailCodes] = useState(Boolean(company.emailCodesEnabled));
   const [plan, setPlan] = useState<PlanId>(company.subscription.plan);
   const [status, setStatus] = useState<SubscriptionStatus>(company.subscription.status);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +108,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
     setError(null);
     setBusy(true);
     try {
-      await adminApi.updateCompany(company.id, { name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null, active });
+      await adminApi.updateCompany(company.id, { name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null, active, emailCodesEnabled: emailCodes });
       if (plan !== sub.plan || status !== sub.status) await adminApi.updateAccount(sub.accountId, { plan, status });
       onSaved('Empresa atualizada.');
     } catch (err) {
@@ -158,6 +159,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
           <Field label="E-mail"><input className="input" type="email" value={form.email} onChange={set('email')} /></Field>
         </div>
         <Switch checked={active} onChange={setActive} label="Empresa ativa" description="Desativada, ninguém da empresa consegue entrar e o WhatsApp dela é desconectado." />
+        <Switch checked={emailCodes} onChange={setEmailCodes} label="Códigos por e-mail" description="Libera a aba Códigos por e-mail e a opção “Receber código de acesso” no bot desta empresa." />
       </form>
     </Modal>
   );

@@ -6,7 +6,7 @@ import { ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToa
 import { errorMessage, servicesApi, type Service, type ServiceKind } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AiPlanBadge, useAiPlan } from '@/components/AiPlanLock';
-import { duration, money, parseMoney } from '@/lib/format';
+import { centsToMoneyInput, duration, maskMoney, money, parseMoney } from '@/lib/format';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120];
 
@@ -28,7 +28,7 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
   const [name, setName] = useState(service?.name ?? '');
   const [description, setDescription] = useState(service?.description ?? '');
   const [minutes, setMinutes] = useState(service?.durationMinutes || 60);
-  const [price, setPrice] = useState(service ? (service.priceCents / 100).toFixed(2).replace('.', ',') : '');
+  const [price, setPrice] = useState(service ? centsToMoneyInput(service.priceCents) : '');
   const [active, setActive] = useState(service?.active ?? true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,7 +120,7 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
         )}
         <Field label="Preço" hint="Deixe em branco ou 0 para “valor sob consulta”.">
           <div className="input-icon"><span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontWeight: 600 }}>R$</span>
-            <input className="input" style={{ paddingLeft: 46 }} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
+            <input className="input" style={{ paddingLeft: 46 }} inputMode="numeric" value={price} onChange={(e) => setPrice(maskMoney(e.target.value))} placeholder="0,00" aria-label="Preço em reais" />
           </div>
         </Field>
         <Switch

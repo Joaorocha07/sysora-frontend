@@ -2,7 +2,7 @@ import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { PlanInfo } from '@/lib/api';
 import { money } from '@/lib/format';
-import { TRIAL_DAYS } from '@/lib/plans';
+import { TRIAL_LABEL } from '@/lib/plans';
 
 // Cartão de plano: destaque (preto) no Avançado.
 export default function PlanCard({ plan, action, current }: { plan: PlanInfo; action?: ReactNode; current?: boolean }) {
@@ -24,7 +24,7 @@ export default function PlanCard({ plan, action, current }: { plan: PlanInfo; ac
         {plan.features.map((f) => <li key={f}><Check size={16} />{f}</li>)}
       </ul>
       {/* lib/plans.ts (backend) -> hasAi: a IA só libera com o plano pago. */}
-      {featured && <small className="muted">Os recursos de IA são liberados a partir do primeiro pagamento. O teste grátis de {TRIAL_DAYS} dias é o do plano Inicial.</small>}
+      {featured && <small className="muted">Os recursos de IA são liberados a partir do primeiro pagamento. O teste grátis de {TRIAL_LABEL} é o do plano Inicial.</small>}
       {action}
     </article>
   );

@@ -1,8 +1,59 @@
 'use client';
 
-import { AlertCircle, Check, X } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { AlertCircle, Check, Eye, EyeOff, Lock, X } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { documentStatus, maskDocument } from '@/lib/document';
 import { initials } from '@/lib/format';
+
+// ============ CPF ou CNPJ ============
+// Um campo só: identifica sozinho pelo que é digitado (letra ou mais de 11
+// caracteres = CNPJ, inclusive o alfanumérico) e confere os dígitos verificadores.
+export function DocumentInput({ value, onChange, placeholder = 'CPF ou CNPJ' }: { value: string; onChange: (value: string) => void; placeholder?: string }) {
+  const status = documentStatus(value);
+  const label = status.kind === 'cnpj' ? 'CNPJ' : 'CPF';
+  return (
+    <>
+      <input
+        className="input"
+        value={value}
+        onChange={(e) => onChange(maskDocument(e.target.value))}
+        placeholder={placeholder}
+        autoComplete="off"
+        spellCheck={false}
+        style={{ textTransform: 'uppercase' }}
+        aria-invalid={status.complete && !status.valid}
+      />
+      {status.complete && (
+        <small className={status.valid ? 'muted' : 'field-error'} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {status.valid ? <><Check size={13} />{label} válido</> : <><AlertCircle size={13} />{label} inválido: confira os números.</>}
+        </small>
+      )}
+    </>
+  );
+}
+
+// ============ Campo de senha ============
+// Senha com o "olhinho" para mostrar ou esconder o que foi digitado.
+// icon: cadeado à esquerda (telas de entrada e cadastro).
+export function PasswordInput({ icon, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'className'> & { icon?: boolean }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className={`password-field${icon ? ' input-icon' : ''}`}>
+      {icon && <Lock size={17} />}
+      <input {...props} className="input" type={visible ? 'text' : 'password'} />
+      <button
+        type="button"
+        className="password-toggle"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? 'Esconder senha' : 'Mostrar senha'}
+        aria-pressed={visible}
+        title={visible ? 'Esconder senha' : 'Mostrar senha'}
+      >
+        {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+      </button>
+    </div>
+  );
+}
 
 // ============ Modal ============
 export function Modal({ title, description, onClose, children, footer, wide }: {

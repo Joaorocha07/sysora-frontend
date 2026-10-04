@@ -49,6 +49,20 @@ export const clock = (value: string) => new Date(value).toLocaleTimeString('pt-B
 
 export const money = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+// Máscara de valor em reais enquanto digita (estilo caixa registradora: os
+// dígitos entram pela direita). "4590" -> "45,90"; "123456" -> "1.234,56".
+// Até R$ 1.000.000,00 (limite do backend). Vazio continua vazio.
+const MAX_CENTS = 100_000_000;
+export function maskMoney(value: string): string {
+  const digits = value.replace(/\D/g, '').replace(/^0+/, '');
+  if (!digits) return '';
+  const cents = Math.min(Number(digits.slice(0, 9)), MAX_CENTS);
+  return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Centavos -> texto do campo com máscara (0 vira vazio: "valor sob consulta").
+export const centsToMoneyInput = (cents: number) => (cents > 0 ? maskMoney(String(cents)) : '');
+
 // "150,00" / "150" -> 15000
 export function parseMoney(value: string): number {
   const clean = value.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');

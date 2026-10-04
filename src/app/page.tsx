@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Logo from '@/components/Logo';
 import PlanCard from '@/components/PlanCard';
-import { PLANS, TRIAL_DAYS } from '@/lib/plans';
+import { PLANS, TRIAL_LABEL } from '@/lib/plans';
 import ThemeToggle from '@/components/ThemeToggle';
 
 const features = [
@@ -26,10 +26,6 @@ const steps = [
 ];
 
 const roles = [
-  {
-    icon: ShieldCheck, badge: 'Admin master', title: 'Quem opera o SaaS',
-    items: ['Acompanha empresas, assinaturas e receita', 'Registra pagamentos e troca planos', 'Ativa ou suspende o acesso', 'Entra em qualquer empresa para dar suporte'],
-  },
   {
     icon: Building2, badge: 'Administrador', title: 'O dono de cada empresa',
     items: ['Conecta o WhatsApp e configura o bot', 'Cadastra serviços, horários e equipe', 'No Avançado, gerencia até 2 empresas', 'Tudo que o funcionário faz'],
@@ -67,7 +63,7 @@ export default function Landing() {
               da sua empresa. Ele conversa, cadastra, agenda e lembra seus clientes, enquanto você cuida do que importa.
             </p>
             <div className="cta">
-              <Link href="/cadastro" className="btn btn-primary btn-lg">Testar {TRIAL_DAYS} dias grátis <ArrowRight size={17} /></Link>
+              <Link href="/cadastro" className="btn btn-primary btn-lg">Testar {TRIAL_LABEL} grátis <ArrowRight size={17} /></Link>
               <a href="#planos" className="btn btn-outline btn-lg">Ver planos</a>
             </div>
           </div>
@@ -137,7 +133,7 @@ export default function Landing() {
           <div className="section-head">
             <span className="eyebrow">Planos</span>
             <h2>Um preço justo para atender no automático.</h2>
-            <p>Comece com {TRIAL_DAYS} dias grátis, sem cartão, e troque de plano quando quiser. O Inicial custa menos do que um único cliente que o bot deixa de perder por mês.</p>
+            <p>Comece com {TRIAL_LABEL} grátis, sem cartão, e troque de plano quando quiser. O Inicial custa menos do que um único cliente que o bot deixa de perder por mês.</p>
           </div>
           <div className="pricing">
             {PLANS.map((plan) => (
@@ -153,8 +149,8 @@ export default function Landing() {
         <section className="section" id="acessos">
           <div className="section-head">
             <span className="eyebrow">Acessos</span>
-            <h2>Três níveis de acesso, cada um com o que precisa.</h2>
-            <p>Um SaaS multiempresa: os dados de cada empresa ficam separados, e cada pessoa vê apenas o que o seu papel permite.</p>
+            <h2>Dois níveis de acesso, cada um com o que precisa.</h2>
+            <p>Os dados de cada empresa ficam separados, e cada pessoa da equipe vê apenas o que o seu papel permite.</p>
           </div>
           <div className="roles">
             {roles.map(({ icon: Icon, badge, title, items }) => (

@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { Building2, Clock, KeyRound, Save } from 'lucide-react';
 import AccountForm from '@/components/AccountForm';
 import MyTeams from '@/components/MyTeams';
-import { Field, FormError, Loading, PageHead, Switch, useToast } from '@/components/ui';
+import { Field, FormError, Loading, PageHead, Switch, useToast, DocumentInput } from '@/components/ui';
 import { errorMessage, settingsApi, type CompanyProfile, type Settings } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { WEEKDAYS, maskPhone } from '@/lib/format';
@@ -38,7 +38,7 @@ function CompanyForm({ company, onSaved }: { company: CompanyProfile; onSaved: (
       <FormError message={error} />
       <Field label="Nome da empresa" hint="Aparece nas mensagens do bot pelo marcador {empresa}."><input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
       <div className="grid-2">
-        <Field label="CNPJ / CPF"><input className="input" value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} /></Field>
+        <Field label="CNPJ ou CPF"><DocumentInput value={form.document} onChange={(document) => setForm({ ...form, document })} /></Field>
         <Field label="Telefone"><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
       </div>
       <Field label="E-mail"><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>

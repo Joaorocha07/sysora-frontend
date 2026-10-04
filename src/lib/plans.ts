@@ -36,4 +36,6 @@ export const PLANS: PlanInfo[] = [
   },
 ];
 
-export const TRIAL_DAYS = 7;
+// Teste grátis: 30 dias (1 mês), igual ao backend (lib/plans.ts).
+export const TRIAL_DAYS = 30;
+export const TRIAL_LABEL = '1 mês';

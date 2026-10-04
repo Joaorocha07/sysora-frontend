@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState, type FormEvent } from 'react';
-import { ArrowLeft, CheckCircle2, Lock } from 'lucide-react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
 import Logo from '@/components/Logo';
-import { Field, FormError } from '@/components/ui';
+import { Field, FormError, PasswordInput } from '@/components/ui';
 import { authApi, errorMessage } from '@/lib/api';
 
 function ResetForm() {
@@ -52,10 +52,10 @@ function ResetForm() {
           </div>
           <FormError message={error} />
           <Field label="Nova senha">
-            <div className="input-icon"><Lock size={17} /><input className="input" type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></div>
+            <PasswordInput icon minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
           </Field>
           <Field label="Confirme a senha">
-            <div className="input-icon"><Lock size={17} /><input className="input" type="password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" /></div>
+            <PasswordInput icon minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
           </Field>
           <button className="btn btn-primary btn-lg btn-block" disabled={busy || !token}>{busy ? <span className="spinner" /> : 'Salvar nova senha'}</button>
           <Link href="/login" className="btn btn-ghost"><ArrowLeft size={16} /> Voltar para o login</Link>

@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Building2, ChevronRight, Lock, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, ChevronRight, Mail } from 'lucide-react';
 import AuthLayout from '@/components/AuthLayout';
 import GoogleButton from '@/components/GoogleButton';
 import Logo from '@/components/Logo';
-import { Avatar, Field, FormError } from '@/components/ui';
+import { Avatar, Field, FormError, PasswordInput } from '@/components/ui';
 import { errorMessage, takeLoginNotice } from '@/lib/api';
 import { homeFor, useAuth } from '@/lib/auth';
 import { ROLE_LABELS } from '@/lib/format';
@@ -116,10 +116,7 @@ export default function LoginPage() {
           </div>
         </Field>
         <Field label="Senha">
-          <div className="input-icon">
-            <Lock size={17} />
-            <input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Sua senha" />
-          </div>
+          <PasswordInput icon autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Sua senha" />
         </Field>
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: -8 }}>
           <Link href="/esqueci-senha" className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Esqueci minha senha</Link>

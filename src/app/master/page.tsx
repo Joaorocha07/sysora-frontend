@@ -3,11 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, Banknote, Building2, CreditCard, Globe, Pencil, Plus, Search, Sparkles, Trash2, TrendingUp } from 'lucide-react';
-import { Avatar, ConfirmDialog, Empty, Field, FormError, Loading, Modal, PageHead, Switch, useToast } from '@/components/ui';
+import { Avatar, ConfirmDialog, Empty, Field, FormError, Loading, Modal, PageHead, Switch, useToast, PasswordInput, DocumentInput } from '@/components/ui';
 import { adminApi, errorMessage, type AdminCompany, type AdminStats, type PlanId, type Subscription, type SubscriptionStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { brDate, maskPhone, money } from '@/lib/format';
-import { PLANS, TRIAL_DAYS } from '@/lib/plans';
+import { PLANS, TRIAL_LABEL } from '@/lib/plans';
 
 const STATUS_LABEL: Record<SubscriptionStatus, string> = { TRIAL: 'Teste grátis', ACTIVE: 'Ativa', PAST_DUE: 'Pagamento pendente', CANCELED: 'Cancelada' };
 
@@ -72,12 +72,12 @@ function NewCompanyModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
         <div className="eyebrow">Empresa</div>
         <div className="grid-2">
           <Field label="Nome da empresa"><input className="input" required minLength={2} value={form.name} onChange={set('name')} /></Field>
-          <Field label="CNPJ / CPF"><input className="input" value={form.document} onChange={set('document')} placeholder="opcional" /></Field>
+          <Field label="CNPJ ou CPF"><DocumentInput value={form.document} onChange={(document) => setForm((f) => ({ ...f, document }))} placeholder="opcional" /></Field>
           <Field label="Telefone"><input className="input" value={form.phone} onChange={set('phone')} placeholder="opcional" /></Field>
           <Field label="E-mail da empresa"><input className="input" type="email" value={form.email} onChange={set('email')} placeholder="opcional" /></Field>
         </div>
         <Field label="Plano"><PlanPicker value={plan} onChange={setPlan} /></Field>
-        <Switch checked={trial} onChange={setTrial} label={`Começar com ${TRIAL_DAYS} dias grátis`} description="Desligado, a conta já nasce paga por 30 dias (ex.: o cliente pagou antes)." />
+        <Switch checked={trial} onChange={setTrial} label={`Começar com ${TRIAL_LABEL} grátis`} description="Desligado, a conta já nasce paga por 30 dias (ex.: o cliente pagou antes)." />
         <div className="divider" />
         <div className="eyebrow">Administrador da empresa</div>
         <div className="grid-2">
@@ -85,7 +85,7 @@ function NewCompanyModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           <Field label="E-mail de acesso"><input className="input" type="email" required value={form.adminEmail} onChange={set('adminEmail')} /></Field>
         </div>
         <Field label="Senha inicial" hint="Mínimo de 8 caracteres. Se o e-mail já tiver conta na Sysora, a senha atual dele é mantida.">
-          <input className="input" type="password" required minLength={8} autoComplete="new-password" value={form.adminPassword} onChange={set('adminPassword')} />
+          <PasswordInput required minLength={8} autoComplete="new-password" value={form.adminPassword} onChange={set('adminPassword')} />
         </Field>
       </form>
     </Modal>
@@ -153,7 +153,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
         <div className="eyebrow">Empresa</div>
         <div className="grid-2">
           <Field label="Nome da empresa"><input className="input" required minLength={2} value={form.name} onChange={set('name')} /></Field>
-          <Field label="CNPJ / CPF"><input className="input" value={form.document} onChange={set('document')} /></Field>
+          <Field label="CNPJ ou CPF"><DocumentInput value={form.document} onChange={(document) => setForm((f) => ({ ...f, document }))} /></Field>
           <Field label="Telefone"><input className="input" value={form.phone} onChange={set('phone')} /></Field>
           <Field label="E-mail"><input className="input" type="email" value={form.email} onChange={set('email')} /></Field>
         </div>

@@ -15,6 +15,7 @@ import Logo from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
 import { accountApi, errorMessage, subscriptionsApi, type PlanId, type PlanInfo } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { isValidCpf, maskCpf } from '@/lib/document';
 import { money } from '@/lib/format';
 import { FormError, Loading } from '@/components/ui';
 
@@ -24,12 +25,6 @@ if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
 
 type Tab = 'card' | 'pix';
 
-function maskCpf(v: string) {
-  return v.replace(/\D/g, '').slice(0, 11)
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mpStyle: any = {
@@ -394,8 +389,10 @@ function CheckoutContent() {
                         value={cpf}
                         onChange={(e) => setCpf(maskCpf(e.target.value))}
                         required
+                        aria-invalid={cpf.length === 14 && !isValidCpf(cpf)}
                       />
                     </div>
+                    {cpf.length === 14 && !isValidCpf(cpf) && <small className="field-error">CPF inválido: confira os números.</small>}
                   </label>
                   <button
                     type="submit"

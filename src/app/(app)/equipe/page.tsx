@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Check, Copy, KeyRound, Link2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, UserCog, X } from 'lucide-react';
 import { useShell } from '@/components/AppShell';
-import { Avatar, ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToast } from '@/components/ui';
+import { Avatar, ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToast, PasswordInput } from '@/components/ui';
 import { errorMessage, settingsApi, usersApi, type Member, type Role } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ROLE_LABELS, maskPhone, relativeTime } from '@/lib/format';
@@ -59,7 +59,7 @@ function MemberModal({ member, onClose, onSaved }: { member?: Member | null; onC
           </Field>
         </div>
         <Field label={member ? 'Nova senha (opcional)' : 'Senha inicial'} hint="Mínimo de 8 caracteres. Compartilhe com a pessoa de forma segura.">
-          <input className="input" type="password" autoComplete="new-password" minLength={8} required={!member} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput autoComplete="new-password" minLength={8} required={!member} value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
         {member && <Switch checked={active} onChange={setActive} label="Acesso ativo" description="Usuários inativos não conseguem entrar nesta empresa." />}
         <div className="phone-preview">

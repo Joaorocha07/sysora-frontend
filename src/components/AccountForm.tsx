@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { KeyRound } from 'lucide-react';
-import { Avatar, Field, FormError, useToast } from './ui';
+import { Avatar, Field, FormError, useToast, PasswordInput } from './ui';
 import { authApi, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -42,11 +42,11 @@ export default function AccountForm() {
       <div className="divider" />
       <FormError message={error} />
       <Field label="Senha atual" hint="Criou a conta pelo Google? Defina uma senha em “Esqueci minha senha”, na tela de login.">
-        <input className="input" type="password" required autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+        <PasswordInput required autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
       </Field>
       <div className="grid-2">
-        <Field label="Nova senha" hint="Mínimo de 8 caracteres."><input className="input" type="password" required minLength={8} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
-        <Field label="Confirme a nova senha"><input className="input" type="password" required minLength={8} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
+        <Field label="Nova senha" hint="Mínimo de 8 caracteres."><PasswordInput required minLength={8} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
+        <Field label="Confirme a nova senha"><PasswordInput required minLength={8} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
       </div>
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-primary" disabled={busy}>{busy ? <span className="spinner" /> : <KeyRound size={16} />}Alterar senha</button>

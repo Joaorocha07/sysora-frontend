@@ -90,7 +90,8 @@ export type Settings = {
   hourReminderEnabled: boolean; hourReminderMinutes: number; hourReminderMessage: string;
   pauseOnStaffReply: boolean; humanTimeoutMinutes: number; humanEndMessage: string;
 };
-export type CompanyProfile = { id: string; name: string; slug: string; document: string | null; phone: string | null; email: string | null; inviteCode: string };
+// address: endereço de atendimento (vai na confirmação e no comprovante do agendamento pelo link).
+export type CompanyProfile = { id: string; name: string; slug: string; document: string | null; phone: string | null; email: string | null; address?: string | null; inviteCode: string };
 
 // Número conectado pela API oficial do WhatsApp (Cloud API da Meta).
 export type WhatsAppTemplateStatus = 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'MISSING' | string;
@@ -119,13 +120,19 @@ export type WhatsAppUsage = {
 };
 
 // Fluxo do chatbot (aba "Fluxo do bot"): árvore de menus a partir das boas-vindas.
-export type FlowAction = 'agendar' | 'meus' | 'servicos' | 'equipe' | 'codigo' | 'trocar';
+// 'link': agenda pela página do link pessoal (/agendar/[token]) em vez da conversa.
+export type FlowAction = 'agendar' | 'link' | 'meus' | 'servicos' | 'equipe' | 'codigo' | 'trocar';
 export type FlowNodeType = 'menu' | 'message' | 'action' | 'end';
 export type FlowNode = {
   id: string; label: string; type: FlowNodeType; messages: string[]; together: boolean;
   prompt?: string; options?: FlowNode[]; action?: FlowAction; next?: 'menu' | 'parent';
 };
-export type BotFlow = { flow: FlowNode; custom: boolean };
+// A empresa guarda até `max` fluxos; um fica em uso no WhatsApp (active).
+export type BotFlowSummary = { id: string; name: string; active: boolean; updatedAt: string };
+export type BotFlow = BotFlowSummary & { flow: FlowNode };
+export type BotFlowList = { flows: BotFlowSummary[]; max: number };
+// Modelos do botão "+": do zero, o padrão ou o de agendamento pelo link.
+export type FlowTemplate = 'vazio' | 'padrao' | 'link';
 export type SoraUsage = { used: number; limit: number; enabled: boolean; allowed: boolean };
 // IA do atendimento (entende texto livre e áudios no WhatsApp).
 export type BotAiStatus = { used: number; limit: number; available: boolean; transcription: boolean; allowed: boolean };
@@ -519,6 +526,36 @@ export const clientSubscriptionsApi = {
   remove: (id: string) => send('DELETE', `/client-subscriptions/${id}`),
 };
 
+// Página pública do link de agendamento mandado pelo bot (sem login).
+export type PublicBooking = {
+  company: { name: string; phone: string | null; address: string | null };
+  // name nulo: o cliente ainda não informou o nome (a página pergunta).
+  client: { name: string | null; phone: string };
+  services: { id: string; name: string; description: string | null; durationMinutes: number; priceCents: number }[];
+  hours: { openingTime: string; closingTime: string; workDays: number[] };
+  expiresAt: string;
+};
+export type PublicBookingResult = { date: string; startTime: string; endTime: string; totalCents: number; services: string[] };
+// notified: a confirmação foi para o WhatsApp do cliente (empresa conectada).
+// Comprovante do agendamento pelo link (página /comprovante/[token]).
+export type BookingReceipt = {
+  code: string; status: AppointmentStatus; date: string; startTime: string; endTime: string; totalCents: number;
+  items: { name: string; durationMinutes: number; priceCents: number }[];
+  client: { name: string | null; phone: string };
+  company: { name: string; phone: string | null; address: string | null };
+  createdAt: string;
+};
+export const bookingApi = {
+  get: (token: string) => get<PublicBooking>(`/booking/${encodeURIComponent(token)}`),
+  days: (token: string, serviceIds: string[]) =>
+    get<{ days: string[] }>(`/booking/${encodeURIComponent(token)}/days${qs({ services: serviceIds.join(',') })}`).then((r) => r.days),
+  times: (token: string, serviceIds: string[], date: string) =>
+    get<{ times: string[] }>(`/booking/${encodeURIComponent(token)}/times${qs({ services: serviceIds.join(','), date })}`).then((r) => r.times),
+  book: (token: string, input: { serviceIds: string[]; date: string; time: string; name?: string }) =>
+    send<{ appointment: PublicBookingResult; notified: boolean; receiptUrl: string; address: string | null }>('POST', `/booking/${encodeURIComponent(token)}`, input),
+  receipt: (token: string) => get<BookingReceipt>(`/booking/receipt/${encodeURIComponent(token)}`),
+};
+
 export type ClientInput = { name: string; phone: string; email?: string | null; birthday?: string | null; notes?: string | null; reminders?: boolean };
 export const clientsApi = {
   list: (search?: string) => get<{ clients: Client[] }>(`/clients${qs({ search })}`).then((r) => r.clients),
@@ -604,7 +641,7 @@ export type SurveySummary = {
 export const settingsApi = {
   get: () => get<{ settings: Settings; company: CompanyProfile }>('/settings'),
   update: (input: Partial<Settings>) => send<{ settings: Settings }>('PUT', '/settings', input).then((r) => r.settings),
-  updateCompany: (input: Partial<Pick<CompanyProfile, 'name' | 'document' | 'phone' | 'email'>>) =>
+  updateCompany: (input: Partial<Pick<CompanyProfile, 'name' | 'document' | 'phone' | 'email' | 'address'>>) =>
     send<{ company: CompanyProfile }>('PATCH', '/settings/company', input).then((r) => r.company),
   regenerateInviteCode: () => send<{ inviteCode: string }>('POST', '/settings/invite-code').then((r) => r.inviteCode),
 };
@@ -618,9 +655,14 @@ export const whatsappApi = {
   cloudOnboard: (input: WhatsAppOnboardInput) => send<WhatsAppStatus>('POST', '/whatsapp/cloud/onboard', input),
   cloudUsage: () => get<WhatsAppUsage>('/whatsapp/cloud/usage'),
   cloudTemplates: () => send<WhatsAppStatus>('POST', '/whatsapp/cloud/templates'),
+  // Fluxo em uso (o que o WhatsApp está usando).
   flow: () => get<BotFlow>('/whatsapp/flow'),
-  saveFlow: (flow: FlowNode) => send<BotFlow>('PUT', '/whatsapp/flow', { flow }),
-  resetFlow: () => send<BotFlow>('DELETE', '/whatsapp/flow'),
+  flows: () => get<BotFlowList>('/whatsapp/flows'),
+  getFlow: (id: string) => get<BotFlow>(`/whatsapp/flows/${id}`),
+  createFlow: (template: FlowTemplate, name?: string) => send<BotFlow>('POST', '/whatsapp/flows', { template, name }),
+  saveFlow: (id: string, input: { flow?: FlowNode; name?: string }) => send<BotFlow>('PUT', `/whatsapp/flows/${id}`, input),
+  activateFlow: (id: string) => send<BotFlowList>('POST', `/whatsapp/flows/${id}/activate`),
+  deleteFlow: (id: string) => send<BotFlowList>('DELETE', `/whatsapp/flows/${id}`),
   // IA do atendimento: status/uso e o que ela entenderia de uma mensagem (simulador).
   ai: () => get<BotAiStatus>('/whatsapp/ai'),
   understand: (flow: FlowNode, text: string, nodeId?: string) => send<BotAiUnderstood>('POST', '/whatsapp/flow/understand', { flow, text, nodeId }),

@@ -165,7 +165,7 @@ function build() {
     const saved = sessionStorage.getItem(COMPANY_KEY);
     if (saved !== null) companyIdx = Number(saved);
   } catch { /* navegação privada */ }
-  return { services, clients, members, pending, appointments, messages, settings, adminCompanies, sub, whatsappSince: 0, companyIdx, botFlow: null as FlowNode | null };
+  return { services, clients, members, pending, appointments, messages, settings, adminCompanies, sub, whatsappSince: 0, companyIdx, flows: null as { id: string; name: string; flow: FlowNode; updatedAt: string }[] | null, activeFlowId: '' };
 }
 
 // Mesmo fluxo padrão do backend (whatsapp.flow.ts).
@@ -281,6 +281,50 @@ function fakeQr(): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 27 27" shape-rendering="crispEdges"><rect x="-1" y="-1" width="27" height="27" fill="#fff"/><g fill="#000">${cells}</g></svg>`)}`;
 }
 
+// Fluxos do bot na demonstração (até 5, um em uso), como em whatsapp.flows.ts.
+type DemoState = ReturnType<typeof build>;
+function demoFlows(d: DemoState, path: string, method: string, body: unknown) {
+  const base = defaultDemoFlow(d.settings.greetingMessage);
+  const template = (t: string): FlowNode => (t === 'link'
+    ? { ...base, options: base.options?.map((o) => (o.action === 'agendar' ? { ...o, action: 'link' as const } : o)) }
+    : t === 'vazio'
+      ? { ...base, messages: ['Olá, {nome}! Bem-vindo(a) à {empresa}.'], options: [{ id: 'equipe', label: 'Falar com a equipe', type: 'action', action: 'equipe', messages: [], together: true }] }
+      : base);
+  const now = () => new Date().toISOString();
+  if (!d.flows) {
+    d.flows = [{ id: id(), name: 'Padrão', flow: base, updatedAt: now() }, { id: id(), name: 'Agendamento pelo link', flow: template('link'), updatedAt: now() }];
+    d.activeFlowId = d.flows[0].id;
+  }
+  const flows = d.flows;
+  const list = () => ({ flows: flows.map((f) => ({ id: f.id, name: f.name, active: f.id === d.activeFlowId, updatedAt: f.updatedAt })), max: 5 });
+  const full = (f: (typeof flows)[number]) => ({ id: f.id, name: f.name, active: f.id === d.activeFlowId, updatedAt: f.updatedAt, flow: f.flow });
+  if (path === '/whatsapp/flow') return full(flows.find((f) => f.id === d.activeFlowId)!);
+  if (path === '/whatsapp/flows' && method === 'GET') return list();
+  if (path === '/whatsapp/flows') {
+    if (flows.length >= 5) throw { demo: true, status: 400, message: 'Você pode ter até 5 fluxos. Apague um para criar outro.' };
+    const input = body as { template: string; name?: string };
+    const created = { id: id(), name: input.name || (input.template === 'link' ? 'Agendamento pelo link' : input.template === 'padrao' ? 'Padrão' : 'Novo fluxo'), flow: template(input.template), updatedAt: now() };
+    flows.push(created);
+    return full(created);
+  }
+  const [, , , flowId, extra] = path.split('/');
+  const flow = flows.find((f) => f.id === flowId);
+  if (!flow) throw { demo: true, status: 404, message: 'Fluxo não encontrado.' };
+  if (extra === 'activate') { d.activeFlowId = flow.id; return list(); }
+  if (method === 'DELETE') {
+    if (flow.id === d.activeFlowId) throw { demo: true, status: 400, message: 'Este fluxo está em uso no WhatsApp. Coloque outro em uso antes de apagar.' };
+    d.flows = flows.filter((f) => f.id !== flow.id);
+    return { flows: d.flows.map((f) => ({ id: f.id, name: f.name, active: f.id === d.activeFlowId, updatedAt: f.updatedAt })), max: 5 };
+  }
+  if (method === 'PUT') {
+    const input = body as { flow?: FlowNode; name?: string };
+    if (input.flow) flow.flow = input.flow;
+    if (input.name) flow.name = input.name;
+    flow.updatedAt = now();
+  }
+  return full(flow);
+}
+
 // "Testar conversa" na demonstração: percorre os menus do fluxo. As funções do
 // sistema (agendar, catálogo...) só explicam o que o bot faria de verdade.
 const demoSims = new Map<string, string>();
@@ -289,6 +333,7 @@ const DEMO_ACTIONS: Record<string, string> = {
   meus: 'o bot mostraria o próximo horário do cliente para confirmar, remarcar ou cancelar',
   servicos: 'o bot enviaria a lista de serviços e produtos com os preços do seu catálogo',
   equipe: 'o bot passaria a conversa para a sua equipe e ficaria em silêncio',
+  link: 'o bot mandaria um link pessoal da agenda, onde o cliente escolhe serviço, dia e horário',
 };
 
 function demoSimulate(body: { simId: string | null; text: string; flow: FlowNode; profileName?: string }) {
@@ -558,11 +603,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   if (path === '/whatsapp/connect') { d.whatsappSince = Date.now(); return whatsappStatus(); }
   if (path === '/whatsapp/disconnect') { d.whatsappSince = 0; d.settings.whatsappConnected = false; d.settings.whatsappPhone = null; return whatsappStatus(); }
   if (path === '/whatsapp/test') return { message: 'Mensagem de teste enviada (demonstração).' };
-  if (path === '/whatsapp/flow') {
-    if (method === 'PUT') d.botFlow = (body as { flow: FlowNode }).flow;
-    if (method === 'DELETE') d.botFlow = null;
-    return { flow: d.botFlow ?? defaultDemoFlow(d.settings.greetingMessage), custom: Boolean(d.botFlow) };
-  }
+  if (path === '/whatsapp/flow' || path.startsWith('/whatsapp/flows')) return demoFlows(d, path, method, body);
   if (path === '/whatsapp/ai') return { used: 0, limit: 1500, available: true, transcription: true, allowed: d.sub.ai };
   if (path === '/whatsapp/flow/understand') return demoUnderstand(body as { flow: FlowNode; text: string });
   if (path === '/privacy/consent') return undefined;

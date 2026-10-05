@@ -3,15 +3,15 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
-  ArrowDown, ArrowUp, CalendarDays, Clock, CornerDownLeft, Flag, Hand, ImageOff, KeyRound, ListTree, MessageSquare, PenLine, Play, Plus, RotateCcw, Save, Send,
+  ArrowDown, ArrowUp, CalendarDays, CheckCircle2, Clock, CornerDownLeft, Flag, Hand, ImageOff, KeyRound, Link2, ListTree, MessageSquare, PenLine, Play, Plus, RotateCcw, Save, Send,
   Sparkles, Tag, Trash2, TriangleAlert, Undo2, Zap,
 } from 'lucide-react';
 import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui';
-import { useUnsavedChanges } from '@/components/UnsavedChanges';
+import { useConfirmLeave, useUnsavedChanges } from '@/components/UnsavedChanges';
 import { AiPlanBadge, AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
 import {
   SORA_FLOW_DRAFT_KEY, errorMessage, servicesApi, settingsApi, soraApi, whatsappApi,
-  type FlowAction, type FlowNode, type FlowNodeType, type Service, type Settings, type SoraStoredMessage, type SoraUsage,
+  type BotFlow, type BotFlowSummary, type FlowAction, type FlowNode, type FlowNodeType, type FlowTemplate, type Service, type Settings, type SoraStoredMessage, type SoraUsage,
 } from '@/lib/api';
 import { SoraCatalogCard } from '@/components/SoraCatalogCard';
 import { useAuth } from '@/lib/auth';
@@ -24,6 +24,8 @@ import { money } from '@/lib/format';
 // As funções do sistema puxam uma seta para um resumo dos dados reais que
 // usam (serviços, horários). O fluxo pode ser montado à mão ou conversando
 // com a Sora (IA), que devolve um rascunho para revisar antes de salvar.
+// A empresa guarda até 5 fluxos (barra "Seus fluxos"); o que está em uso é o
+// que o WhatsApp usa, os outros ficam guardados para testar e trocar.
 
 const MAX_OPTIONS = 9;
 const MAX_MESSAGES = 5;
@@ -39,6 +41,7 @@ const TYPES: Record<FlowNodeType, { label: string; hint: string; icon: typeof Za
 
 const ACTIONS: Record<FlowAction, { label: string; flow: string; sample: string }> = {
   agendar: { label: 'Agendar um horário', flow: 'Serviço → dia → horário → agendado', sample: 'Qual serviço você deseja? Responda com o número:\n\n1) Corte\n2) Escova\n…' },
+  link: { label: 'Agendar pelo link', flow: 'Manda o link pessoal da agenda; o cliente escolhe serviço, dia e horário na página', sample: 'Para agendar, toque no link abaixo e escolha o serviço, o dia e o horário que ficam melhor para você:\n\nhttps://sysora.com.br/agendar/…' },
   meus: { label: 'Meus agendamentos', flow: 'Confirmar, remarcar ou cancelar', sample: 'Seu próximo horário: Corte na sexta, 10/10 às 14:00.\n\n1) Confirmar presença\n2) Remarcar\n3) Cancelar' },
   servicos: { label: 'Serviços e valores', flow: 'Lista serviços e produtos com preços', sample: 'Nossos serviços:\n\n• Corte: R$ 50,00 (30 min)\n…' },
   equipe: { label: 'Falar com a equipe', flow: 'Bot pausa e a equipe assume', sample: '(mensagem de transferência da aba Atendimento humano)' },
@@ -137,20 +140,41 @@ export function BotFlowEditor() {
   const ai = useAiPlan();
   const [saved, setSaved] = useState<FlowNode | null>(null);
   const [flow, setFlow] = useState<FlowNode | null>(null);
-  const [custom, setCustom] = useState(false);
+  // Fluxos da empresa e o que está aberto no editor.
+  const [flows, setFlows] = useState<BotFlowSummary[]>([]);
+  const [maxFlows, setMaxFlows] = useState(5);
+  const [current, setCurrent] = useState<BotFlowSummary | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const confirmLeave = useConfirmLeave();
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
   const [mode, setMode] = useState<'manual' | 'sora'>('manual');
   const [data, setData] = useState<FlowData>({ services: [], settings: null });
   // Fluxo antes da última mudança da Sora, para desfazer.
   const [beforeSora, setBeforeSora] = useState<FlowNode | null>(null);
 
+  // Abre um fluxo no editor.
+  const open = (r: BotFlow) => {
+    const { flow: tree, ...summary } = r;
+    setCurrent(summary);
+    setSaved(tree);
+    setFlow(tree);
+    setEditing(null);
+    setBeforeSora(null);
+  };
+  const currentRef = useRef<BotFlowSummary | null>(null);
+  currentRef.current = current;
+
   useEffect(() => {
-    whatsappApi.flow().then((r) => {
-      setSaved(r.flow);
-      setCustom(r.custom);
-      // Veio do menu Sora com um fluxo proposto: abre como rascunho (não salvo).
+    whatsappApi.flows().then(async (list) => {
+      setFlows(list.flows);
+      setMaxFlows(list.max);
+      const active = list.flows.find((f) => f.active) ?? list.flows[0];
+      const r = await whatsappApi.getFlow(active.id);
+      open(r);
+      // Veio do menu Sora com um fluxo proposto: abre como rascunho (não salvo) no fluxo em uso.
       let draft: FlowNode | null = null;
       try {
         const raw = sessionStorage.getItem(SORA_FLOW_DRAFT_KEY);
@@ -163,6 +187,8 @@ export function BotFlowEditor() {
     Promise.all([servicesApi.list(), settingsApi.get()])
       .then(([services, r]) => setData({ services: services.filter((s) => s.active), settings: r.settings }))
       .catch(() => {});
+    // open só usa setters do estado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast]);
 
   const vars = useMemo<Vars>(() => ({ nome: 'Maria', empresa: company?.name ?? 'Sua empresa' }), [company?.name]);
@@ -176,11 +202,14 @@ export function BotFlowEditor() {
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== 'visible' || dirtyRef.current) return;
-      whatsappApi.flow().then((r) => {
-        if (dirtyRef.current) return;
+      const openId = currentRef.current?.id;
+      if (!openId) return;
+      whatsappApi.flows().then((list) => setFlows(list.flows)).catch(() => {});
+      whatsappApi.getFlow(openId).then((r) => {
+        if (dirtyRef.current || currentRef.current?.id !== r.id) return;
         setSaved((prev) => (JSON.stringify(prev) === JSON.stringify(r.flow) ? prev : r.flow));
         setFlow((prev) => (JSON.stringify(prev) === JSON.stringify(r.flow) ? prev : r.flow));
-        setCustom(r.custom);
+        setCurrent({ id: r.id, name: r.name, active: r.active, updatedAt: r.updatedAt });
       }).catch(() => {});
     };
     window.addEventListener('focus', refresh);
@@ -191,7 +220,7 @@ export function BotFlowEditor() {
   const saveRef = useRef<() => Promise<boolean>>(async () => true);
   useUnsavedChanges(dirty, () => saveRef.current());
 
-  if (!flow || !saved) return <Loading />;
+  if (!flow || !saved || !current) return <Loading />;
   const problems = allProblems(flow);
   const editTarget = editing ? findWithParent(flow, editing) : null;
 
@@ -202,16 +231,16 @@ export function BotFlowEditor() {
   }
 
   async function save(): Promise<boolean> {
-    if (!flow) return false;
+    if (!flow || !current) return false;
     if (problems.length) {
       toast(`${problems[0].label}: ${problems[0].problem}`, true);
       return false;
     }
     setBusy(true);
     try {
-      const r = await whatsappApi.saveFlow(clean(flow));
-      setSaved(r.flow); setFlow(r.flow); setCustom(r.custom);
-      toast('Fluxo salvo. O bot já está usando a nova versão.');
+      const r = await whatsappApi.saveFlow(current.id, { flow: clean(flow) });
+      setSaved(r.flow); setFlow(r.flow);
+      toast(r.active ? 'Fluxo salvo. O bot já está usando a nova versão.' : 'Fluxo salvo. Para o bot usar, clique em “Usar no WhatsApp”.');
       return true;
     } catch (err) {
       toast(errorMessage(err), true);
@@ -222,26 +251,110 @@ export function BotFlowEditor() {
   }
   saveRef.current = save;
 
-  async function reset() {
+  // Troca de fluxo: com alterações não salvas, pergunta antes (UnsavedChanges).
+  function switchTo(id: string) {
+    if (id === current?.id) return;
+    confirmLeave(() => {
+      whatsappApi.getFlow(id).then(open).catch((err) => toast(errorMessage(err), true));
+    });
+  }
+
+  async function createFlow(template: FlowTemplate, name: string) {
     setBusy(true);
     try {
-      const r = await whatsappApi.resetFlow();
-      setSaved(r.flow); setFlow(r.flow); setCustom(r.custom);
-      toast('Fluxo padrão restaurado.');
+      const r = await whatsappApi.createFlow(template, name);
+      setFlows((list) => [...list, { id: r.id, name: r.name, active: r.active, updatedAt: r.updatedAt }]);
+      open(r);
+      setCreating(false);
+      toast('Fluxo criado. Monte as etapas e salve; depois clique em “Usar no WhatsApp”.');
     } catch (err) {
       toast(errorMessage(err), true);
     } finally {
       setBusy(false);
-      setConfirmReset(false);
+    }
+  }
+
+  // Coloca o fluxo aberto em uso no WhatsApp (salvando antes, se preciso).
+  async function activate() {
+    if (!current) return;
+    if (dirty && !(await save())) return;
+    setBusy(true);
+    try {
+      const list = await whatsappApi.activateFlow(current.id);
+      setFlows(list.flows);
+      setCurrent((c) => c && { ...c, active: true });
+      toast(`“${current.name}” agora é o fluxo do WhatsApp.`);
+    } catch (err) {
+      toast(errorMessage(err), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rename(name: string) {
+    if (!current) return;
+    setBusy(true);
+    try {
+      const r = await whatsappApi.saveFlow(current.id, { name });
+      setFlows((list) => list.map((f) => (f.id === r.id ? { ...f, name: r.name } : f)));
+      setCurrent((c) => c && { ...c, name: r.name });
+      setRenaming(false);
+    } catch (err) {
+      toast(errorMessage(err), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!current) return;
+    setBusy(true);
+    try {
+      const list = await whatsappApi.deleteFlow(current.id);
+      setFlows(list.flows);
+      const active = list.flows.find((f) => f.active) ?? list.flows[0];
+      open(await whatsappApi.getFlow(active.id));
+      toast('Fluxo apagado.');
+    } catch (err) {
+      toast(errorMessage(err), true);
+    } finally {
+      setBusy(false);
+      setConfirmDelete(false);
     }
   }
 
   return (
     <div className="stack">
+      <div className="card card-pad stack-sm">
+        <div>
+          <h3>Seus fluxos</h3>
+          <p className="muted" style={{ marginTop: 4 }}>Até {maxFlows} fluxos. O que está <strong>em uso</strong> é o que o bot usa no WhatsApp; os outros ficam guardados para você testar e trocar quando quiser.</p>
+        </div>
+        <div className="flow-tabs" role="tablist">
+          {flows.map((f) => (
+            <button key={f.id} type="button" role="tab" aria-selected={f.id === current.id} className={`flow-tab${f.id === current.id ? ' on' : ''}`} onClick={() => switchTo(f.id)}>
+              {f.active && <span className="flow-tab-dot" title="Em uso no WhatsApp" />}
+              {f.name}
+              {f.active && <small>em uso</small>}
+            </button>
+          ))}
+          {flows.length < maxFlows && (
+            <button type="button" className="flow-tab add" onClick={() => confirmLeave(() => setCreating(true))} title="Criar um fluxo novo"><Plus size={15} />Novo fluxo</button>
+          )}
+        </div>
+        <div className="row-wrap">
+          {current.active
+            ? <span className="badge plain solid"><CheckCircle2 size={13} />Em uso no WhatsApp</span>
+            : <button type="button" className="btn btn-primary btn-sm" onClick={activate} disabled={busy || problems.length > 0} title={problems.length ? 'Ajuste o fluxo antes de usar' : undefined}><CheckCircle2 size={14} />Usar no WhatsApp</button>}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRenaming(true)} disabled={busy}><PenLine size={14} />Renomear</button>
+          {!current.active && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(true)} disabled={busy}><Trash2 size={14} />Apagar</button>}
+        </div>
+      </div>
+
       <div className="card card-pad stack">
         <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
           <div>
-            <h3>Como o bot conversa</h3>
+            <h3>{current.name}: como o bot conversa</h3>
             <p className="muted" style={{ marginTop: 4 }}>Clique numa etapa para editar. Cada opção de um menu vira um número que o cliente responde. Use {'{nome}'} e {'{empresa}'} nos textos.</p>
             <div className="segmented" style={{ marginTop: 12, width: 'fit-content' }}>
               <button type="button" className={mode === 'manual' ? 'on' : ''} onClick={() => setMode('manual')}><PenLine size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Montar manual</button>
@@ -249,7 +362,6 @@ export function BotFlowEditor() {
             </div>
           </div>
           <div className="row-wrap">
-            {custom && <button type="button" className="btn btn-ghost" onClick={() => setConfirmReset(true)} disabled={busy}><RotateCcw size={15} />Restaurar padrão</button>}
             {dirty && <small>Alterações não salvas</small>}
             <button type="button" className="btn btn-outline" disabled={!dirty || busy} onClick={() => setFlow(saved)}>Descartar</button>
             <button type="button" className="btn btn-primary" disabled={!dirty || busy} onClick={save}>{busy ? <span className="spinner" /> : <Save size={16} />}Salvar fluxo</button>
@@ -281,7 +393,8 @@ export function BotFlowEditor() {
         <div className="card flow-canvas">
           <FlowBranch node={flow} index={null} isRoot depth={0} data={data} onEdit={setEditing} onAdd={addOption} />
         </div>
-        <Simulator key={JSON.stringify(flow)} root={flow} draft={dirty} vars={vars} ai={ai} />
+        {/* Fluxo guardado (fora de uso): o teste usa o fluxo desta tela, não o do WhatsApp. */}
+        <Simulator key={`${current.id}:${JSON.stringify(flow)}`} root={flow} draft={dirty || !current.active} vars={vars} ai={ai} />
       </div>
 
       {dirty && (
@@ -323,18 +436,82 @@ export function BotFlowEditor() {
         />
       )}
 
-      {confirmReset && (
+      {creating && <NewFlowModal busy={busy} onClose={() => setCreating(false)} onCreate={createFlow} />}
+      {renaming && <RenameFlowModal name={current.name} busy={busy} onClose={() => setRenaming(false)} onSave={rename} />}
+      {confirmDelete && (
         <ConfirmDialog
-          title="Restaurar o fluxo padrão?"
-          message="Seus menus e mensagens personalizados serão apagados e o bot volta ao menu padrão (agendar, meus agendamentos, serviços e equipe)."
-          confirmLabel="Restaurar"
+          title={`Apagar “${current.name}”?`}
+          message="O fluxo some da lista. O fluxo em uso no WhatsApp não muda."
+          confirmLabel="Apagar"
           danger
           busy={busy}
-          onConfirm={reset}
-          onClose={() => setConfirmReset(false)}
+          onConfirm={remove}
+          onClose={() => setConfirmDelete(false)}
         />
       )}
     </div>
+  );
+}
+
+// ---------- Novo fluxo e renomear ----------
+
+const NEW_FLOW_TEMPLATES: { id: FlowTemplate; label: string; hint: string; icon: typeof Zap }[] = [
+  { id: 'vazio', label: 'Do zero', hint: 'Só as boas-vindas e uma opção. Você monta o resto.', icon: Plus },
+  { id: 'padrao', label: 'Padrão', hint: 'Agendar pela conversa, meus agendamentos, serviços e equipe.', icon: ListTree },
+  { id: 'link', label: 'Agendamento pelo link', hint: 'Igual ao padrão, mas agendar manda o link da agenda.', icon: Link2 },
+];
+
+function NewFlowModal({ busy, onClose, onCreate }: { busy: boolean; onClose: () => void; onCreate: (template: FlowTemplate, name: string) => void }) {
+  const [template, setTemplate] = useState<FlowTemplate>('vazio');
+  const [name, setName] = useState('');
+  const submit = (e: FormEvent) => { e.preventDefault(); onCreate(template, name.trim()); };
+  return (
+    <Modal
+      title="Novo fluxo"
+      description="O fluxo novo fica guardado até você clicar em “Usar no WhatsApp”."
+      onClose={onClose}
+      footer={<>
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+        <button type="submit" form="new-flow" className="btn btn-primary" disabled={busy}>{busy && <span className="spinner" />}Criar fluxo</button>
+      </>}
+    >
+      <form id="new-flow" className="stack" onSubmit={submit}>
+        <Field label="Nome do fluxo"><input className="input" maxLength={40} value={name} placeholder={template === 'vazio' ? 'Ex.: Promoção de dezembro' : NEW_FLOW_TEMPLATES.find((t) => t.id === template)!.label} onChange={(e) => setName(e.target.value)} /></Field>
+        <div className="field">
+          <span>Começar de</span>
+          <div className="stack-sm">
+            {NEW_FLOW_TEMPLATES.map(({ id, label, hint, icon: Icon }) => (
+              <button key={id} type="button" className={`booking-option${template === id ? ' on' : ''}`} onClick={() => setTemplate(id)} aria-pressed={template === id}>
+                <span style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0 }}>
+                  <span className="metric-icon" style={{ flex: 'none' }}><Icon size={16} /></span>
+                  <span style={{ minWidth: 0 }}><strong>{label}</strong><small>{hint}</small></span>
+                </span>
+                <span className="booking-check">{template === id && <CheckCircle2 size={14} />}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RenameFlowModal({ name, busy, onClose, onSave }: { name: string; busy: boolean; onClose: () => void; onSave: (name: string) => void }) {
+  const [value, setValue] = useState(name);
+  const submit = (e: FormEvent) => { e.preventDefault(); if (value.trim()) onSave(value.trim()); };
+  return (
+    <Modal
+      title="Renomear fluxo"
+      onClose={onClose}
+      footer={<>
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+        <button type="submit" form="rename-flow" className="btn btn-primary" disabled={busy || !value.trim()}>{busy && <span className="spinner" />}Salvar</button>
+      </>}
+    >
+      <form id="rename-flow" onSubmit={submit}>
+        <Field label="Nome do fluxo"><input className="input" required maxLength={40} value={value} onChange={(e) => setValue(e.target.value)} /></Field>
+      </form>
+    </Modal>
   );
 }
 
@@ -400,7 +577,8 @@ function FlowCard({ node, index, isRoot, onEdit }: { node: FlowNode; index: numb
 function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
   const { settings } = data;
   // Agendar só oferece serviços; a lista de valores mostra também os produtos.
-  const services = action === 'agendar' ? data.services.filter((s) => s.kind !== 'PRODUCT') : data.services;
+  const booking = action === 'agendar' || action === 'link';
+  const services = booking ? data.services.filter((s) => s.kind !== 'PRODUCT') : data.services;
   const firstServices = services.slice(0, 3);
   const more = services.length - firstServices.length;
   const hours = settings && (
@@ -408,10 +586,11 @@ function ActionData({ action, data }: { action: FlowAction; data: FlowData }) {
   );
   const noServices = <span>Nenhum serviço ativo. <Link href="/servicos">Cadastrar serviços</Link></span>;
 
-  if (action === 'agendar') {
+  if (booking) {
     return (
       <div className="flow-data">
-        <strong><CalendarDays size={13} />Serviço → dia → horário</strong>
+        {action === 'link' && <strong><Link2 size={13} />Link pessoal da agenda (vale 7 dias)</strong>}
+        <strong><CalendarDays size={13} />{action === 'link' ? 'Na página: serviço → dia → horário' : 'Serviço → dia → horário'}</strong>
         {services.length ? (
           <ul>
             {firstServices.map((s) => <li key={s.id}><span>{s.name}</span><span>{s.durationMinutes} min</span></li>)}

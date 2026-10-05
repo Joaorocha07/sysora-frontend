@@ -16,7 +16,7 @@ type Tab = 'empresa' | 'horarios' | 'conta';
 
 function CompanyForm({ company, onSaved }: { company: CompanyProfile; onSaved: (c: CompanyProfile) => void }) {
   const toast = useToast();
-  const [form, setForm] = useState({ name: company.name, document: company.document ?? '', phone: company.phone ?? '', email: company.email ?? '' });
+  const [form, setForm] = useState({ name: company.name, document: company.document ?? '', phone: company.phone ?? '', email: company.email ?? '', address: company.address ?? '' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +25,7 @@ function CompanyForm({ company, onSaved }: { company: CompanyProfile; onSaved: (
     setError(null);
     setBusy(true);
     try {
-      onSaved(await settingsApi.updateCompany({ name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null }));
+      onSaved(await settingsApi.updateCompany({ name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null, address: form.address.trim() || null }));
       toast('Dados da empresa salvos.');
     } catch (err) {
       setError(errorMessage(err));
@@ -43,6 +43,9 @@ function CompanyForm({ company, onSaved }: { company: CompanyProfile; onSaved: (
         <Field label="Telefone"><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
       </div>
       <Field label="E-mail"><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+      <Field label="Endereço de atendimento" hint="Vai na confirmação do WhatsApp e no comprovante do agendamento pelo link.">
+        <input className="input" maxLength={200} value={form.address} placeholder="Ex.: Rua das Flores, 123 - Centro, Uberlândia - MG" onChange={(e) => setForm({ ...form, address: e.target.value })} />
+      </Field>
       <div className="row-wrap">
         <Link href="/assinatura" className="badge plain soft">Ver plano e assinatura</Link>
         <span className="badge plain soft">Código de convite: {company.inviteCode}</span>

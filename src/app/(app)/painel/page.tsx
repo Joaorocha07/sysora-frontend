@@ -86,13 +86,13 @@ export default function PainelPage() {
         ))}
       </div>
 
-      {isAdmin && (data.servicesCount === 0 || !data.whatsapp.whatsappConnected || data.pendingUsers > 0) && (
+      {isAdmin && (data.servicesCount === 0 || !data.hoursReviewed || !data.whatsapp.whatsappConnected || data.pendingUsers > 0) && (
         <div className="card" style={{ marginBottom: 20 }}>
           <div className="card-head" style={{ paddingBottom: 14 }}><div><h2>Primeiros passos</h2><p>Deixe o bot pronto para atender seus clientes</p></div></div>
           <div className="onboarding">
             {[
               { done: data.servicesCount > 0, href: '/servicos', title: 'Monte seu catálogo', text: 'Serviços com duração e preço (e produtos, se vender). O bot usa essa lista no WhatsApp.' },
-              { done: false, href: '/configuracoes?aba=horarios', title: 'Confira os horários de atendimento', text: 'Dias, abertura, fechamento e intervalo de almoço.' },
+              { done: data.hoursReviewed, href: '/configuracoes?aba=horarios', title: 'Confira os horários de atendimento', text: 'Dias, abertura, fechamento e intervalo de almoço.' },
               { done: data.whatsapp.whatsappConnected, href: '/whatsapp', title: 'Conecte o WhatsApp', text: 'Conecte o número da empresa pelo WhatsApp oficial, em poucos cliques.' },
               ...(data.pendingUsers > 0 ? [{ done: false, href: '/equipe', title: `Aprove ${data.pendingUsers} ${data.pendingUsers === 1 ? 'pedido' : 'pedidos'} de acesso`, text: 'Pessoas da equipe pediram para entrar com o código da empresa.' }] : []),
             ].map((step) => (

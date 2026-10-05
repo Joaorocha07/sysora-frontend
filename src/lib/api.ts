@@ -150,7 +150,7 @@ export type SoraSendResult = {
 
 export type Dashboard = {
   clients: number; newClientsMonth: number; todayCount: number; monthAppointments: number; monthCompleted: number;
-  monthRevenueCents: number; botAppointmentsMonth: number; unreadMessages: number; servicesCount: number; pendingUsers: number;
+  monthRevenueCents: number; botAppointmentsMonth: number; unreadMessages: number; servicesCount: number; pendingUsers: number; hoursReviewed: boolean;
   whatsapp: { whatsappConnected: boolean; whatsappPhone: string | null; botEnabled: boolean };
   today: Appointment[]; upcoming: Appointment[]; week: { date: string; count: number }[];
 };

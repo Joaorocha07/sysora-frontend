@@ -26,6 +26,8 @@ export type Subscription = {
   trialEndsAt: string | null; paidUntil: string | null; active: boolean; maxCompanies: number; maxEmployees: number;
   // Recursos de IA liberados: plano Avançado pago (o teste grátis não tem IA).
   ai: boolean;
+  // Cortesia (teste, parceiro): plano liberado sem cobrança, fora da receita do painel master.
+  complimentary?: boolean;
 };
 export type PlanInfo = { id: PlanId; name: string; priceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
 export type Session = {
@@ -122,7 +124,6 @@ export type FlowNode = {
   prompt?: string; options?: FlowNode[]; action?: FlowAction; next?: 'menu' | 'parent';
 };
 export type BotFlow = { flow: FlowNode; custom: boolean };
-export type SoraMessage = { role: 'user' | 'assistant'; text: string };
 export type SoraUsage = { used: number; limit: number; enabled: boolean; allowed: boolean };
 // IA do atendimento (entende texto livre e áudios no WhatsApp).
 export type BotAiStatus = { used: number; limit: number; available: boolean; transcription: boolean; allowed: boolean };
@@ -130,7 +131,20 @@ export type BotAiUnderstood = {
   optionId: string | null; intent: string; answer: string | null;
   services: string[]; date: string | null; time: string | null; usage: BotAiStatus;
 };
-export type SoraReply = { reply: string; flow: FlowNode | null; usage: { used: number; limit: number } };
+// Sora com conversas salvas (menu Sora e painel do Fluxo do bot).
+export type SoraCatalogChange = {
+  op: 'create' | 'update'; id: string | null; kind: ServiceKind; name: string; description: string | null;
+  priceCents: number | null; durationMinutes: number | null; active: boolean | null;
+};
+export type SoraConversation = { id: string; title: string; source: 'chat' | 'fluxo'; createdAt: string; updatedAt: string; _count?: { messages: number } };
+export type SoraStoredMessage = {
+  id: string; role: 'user' | 'assistant'; text: string; createdAt: string;
+  payload: { flow?: FlowNode | null; catalog?: SoraCatalogChange[] | null; catalogAppliedAt?: string } | null;
+};
+export type SoraSendResult = {
+  conversation: SoraConversation; messages: SoraStoredMessage[]; flow: FlowNode | null; catalog: SoraCatalogChange[] | null;
+  usage: { used: number; limit: number };
+};
 
 export type Dashboard = {
   clients: number; newClientsMonth: number; todayCount: number; monthAppointments: number; monthCompleted: number;
@@ -152,7 +166,7 @@ export type AdminUser = {
   companies: { id: string; name: string; companyActive: boolean; role: Role; status: 'PENDING' | 'ACTIVE'; active: boolean }[];
 };
 export type AdminStats = {
-  companies: number; accounts: number; payingAccounts: number; trialAccounts: number; mrrCents: number;
+  companies: number; accounts: number; payingAccounts: number; trialAccounts: number; mrrCents: number; complimentaryAccounts?: number;
   users: number; clients: number; appointmentsThisMonth: number; whatsappConnected: number;
 };
 export type AccountOverview = {
@@ -350,7 +364,7 @@ export const authApi = {
 };
 
 export type CompanyInput = { name: string; document?: string | null; phone?: string | null; email?: string | null };
-export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEndsAt?: string | null; paidUntil?: string | null };
+export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEndsAt?: string | null; paidUntil?: string | null; complimentary?: boolean };
 // Configurações da plataforma, editadas pelo admin master.
 export type PlatformSettings = { publicSignupEnabled: boolean; aiCreditCents: number };
 // Gastos com IA (Sora), estimados pelos tokens de cada chamada.
@@ -559,9 +573,6 @@ export const whatsappApi = {
   flow: () => get<BotFlow>('/whatsapp/flow'),
   saveFlow: (flow: FlowNode) => send<BotFlow>('PUT', '/whatsapp/flow', { flow }),
   resetFlow: () => send<BotFlow>('DELETE', '/whatsapp/flow'),
-  // Sora (IA que monta o fluxo): devolve um rascunho; quem salva é saveFlow.
-  soraUsage: () => get<SoraUsage>('/whatsapp/flow/sora'),
-  askSora: (messages: SoraMessage[], flow: FlowNode) => send<SoraReply>('POST', '/whatsapp/flow/sora', { messages, flow }),
   // IA do atendimento: status/uso e o que ela entenderia de uma mensagem (simulador).
   ai: () => get<BotAiStatus>('/whatsapp/ai'),
   understand: (flow: FlowNode, text: string, nodeId?: string) => send<BotAiUnderstood>('POST', '/whatsapp/flow/understand', { flow, text, nodeId }),
@@ -569,4 +580,18 @@ export const whatsappApi = {
   // Sem flow, o backend usa o fluxo salvo (o mesmo do WhatsApp).
   simulate: (input: { simId: string | null; text: string; flow?: FlowNode; profileName?: string }) =>
     send<{ simId: string; replies: string[]; step: string | null; inactive: boolean }>('POST', '/whatsapp/simulate', input),
+};
+
+// Sora: conversas salvas, catálogo e fluxo. O fluxo que ela devolve é
+// rascunho (quem salva é whatsappApi.saveFlow); o catálogo só entra com applyCatalog.
+// Fluxo proposto no menu Sora, levado para o editor (sessionStorage) como rascunho.
+export const SORA_FLOW_DRAFT_KEY = 'sysora:sora-flow-draft';
+
+export const soraApi = {
+  usage: () => get<SoraUsage>('/sora/usage'),
+  conversations: () => get<{ conversations: SoraConversation[] }>('/sora/conversations').then((r) => r.conversations),
+  conversation: (id: string) => get<{ conversation: SoraConversation; messages: SoraStoredMessage[] }>(`/sora/conversations/${id}`),
+  remove: (id: string) => send('DELETE', `/sora/conversations/${id}`),
+  send: (input: { conversationId: string | null; text: string; mode: 'chat' | 'fluxo'; flow?: FlowNode }) => send<SoraSendResult>('POST', '/sora/messages', input),
+  applyCatalog: (messageId: string) => send<{ created: string[]; updated: string[] }>('POST', `/sora/messages/${messageId}/apply-catalog`),
 };

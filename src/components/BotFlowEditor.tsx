@@ -10,9 +10,10 @@ import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui'
 import { useUnsavedChanges } from '@/components/UnsavedChanges';
 import { AiPlanBadge, AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
 import {
-  errorMessage, servicesApi, settingsApi, whatsappApi,
-  type FlowAction, type FlowNode, type FlowNodeType, type Service, type Settings, type SoraMessage, type SoraUsage,
+  SORA_FLOW_DRAFT_KEY, errorMessage, servicesApi, settingsApi, soraApi, whatsappApi,
+  type FlowAction, type FlowNode, type FlowNodeType, type Service, type Settings, type SoraStoredMessage, type SoraUsage,
 } from '@/lib/api';
+import { SoraCatalogCard } from '@/components/SoraCatalogCard';
 import { useAuth } from '@/lib/auth';
 import { money } from '@/lib/format';
 
@@ -146,7 +147,19 @@ export function BotFlowEditor() {
   const [beforeSora, setBeforeSora] = useState<FlowNode | null>(null);
 
   useEffect(() => {
-    whatsappApi.flow().then((r) => { setSaved(r.flow); setFlow(r.flow); setCustom(r.custom); }).catch((err) => toast(errorMessage(err), true));
+    whatsappApi.flow().then((r) => {
+      setSaved(r.flow);
+      setCustom(r.custom);
+      // Veio do menu Sora com um fluxo proposto: abre como rascunho (não salvo).
+      let draft: FlowNode | null = null;
+      try {
+        const raw = sessionStorage.getItem(SORA_FLOW_DRAFT_KEY);
+        sessionStorage.removeItem(SORA_FLOW_DRAFT_KEY);
+        draft = raw ? (JSON.parse(raw) as FlowNode) : null;
+      } catch { /* sem storage */ }
+      setFlow(draft ?? r.flow);
+      if (draft) toast('Fluxo da Sora aberto como rascunho. Revise e clique em Salvar fluxo.');
+    }).catch((err) => toast(errorMessage(err), true));
     Promise.all([servicesApi.list(), settingsApi.get()])
       .then(([services, r]) => setData({ services: services.filter((s) => s.active), settings: r.settings }))
       .catch(() => {});
@@ -472,10 +485,12 @@ const SORA_IDEAS = [
   'Adicione uma opção com as formas de pagamento',
 ];
 
-type SoraChatMessage = SoraMessage & { changed?: boolean; error?: boolean };
+// Mensagem na tela: as salvas (com id) e os avisos locais de erro.
+type SoraChatMessage = { id?: string; role: 'user' | 'assistant'; text: string; changed?: boolean; error?: boolean; payload?: SoraStoredMessage['payload'] };
 
-// Chat com a Sora: cada pedido manda a conversa e o fluxo atual; a resposta
-// pode trazer um fluxo novo, que entra no fluxograma como rascunho.
+// Chat com a Sora: cada pedido manda o fluxo atual; a resposta pode trazer um
+// fluxo novo (entra no fluxograma como rascunho) e mudanças no catálogo (o dono
+// confirma). A conversa fica salva no histórico do menu Sora.
 function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
   flow: FlowNode; problems: { label: string; problem: string }[]; canUndo: boolean;
   onDraft: (flow: FlowNode) => void; onUndo: () => void;
@@ -484,9 +499,10 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
   const [chat, setChat] = useState<SoraChatMessage[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { whatsappApi.soraUsage().then(setUsage).catch(() => setUsage({ used: 0, limit: 0, enabled: false, allowed: false })); }, []);
+  useEffect(() => { soraApi.usage().then(setUsage).catch(() => setUsage({ used: 0, limit: 0, enabled: false, allowed: false })); }, []);
   useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight }); }, [chat, busy]);
 
   const disabled = !usage?.enabled;
@@ -499,14 +515,14 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
       setChat((c) => [...c, { role: 'assistant', text: `Antes, resolva o aviso em "${problems[0].label}": ${problems[0].problem}`, error: true }]);
       return;
     }
-    // Só a conversa de verdade vai para a Sora (sem os avisos locais de erro).
-    const history = [...chat.filter((m) => !m.error), { role: 'user' as const, text: content }];
     setChat((c) => [...c, { role: 'user', text: content }]);
     setText('');
     setBusy(true);
     try {
-      const r = await whatsappApi.askSora(history.map(({ role, text: t }) => ({ role, text: t })), clean(flow));
-      setChat((c) => [...c, { role: 'assistant', text: r.reply, changed: Boolean(r.flow) }]);
+      const r = await soraApi.send({ conversationId, text: content, mode: 'fluxo', flow: clean(flow) });
+      setConversationId(r.conversation.id);
+      const reply = r.messages[r.messages.length - 1];
+      setChat((c) => [...c, { id: reply.id, role: 'assistant', text: reply.text, changed: Boolean(r.flow), payload: reply.payload }]);
       if (r.flow) onDraft(r.flow);
       setUsage((u) => (u ? { ...u, ...r.usage } : u));
     } catch (err) {
@@ -530,7 +546,7 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
           <small style={{ display: 'block' }} className="muted">Descreva o atendimento que você quer e eu monto o fluxo. Você revisa no fluxograma antes de salvar.</small>
         </div>
         {canUndo && <button type="button" className="btn btn-ghost btn-sm" onClick={onUndo}><Undo2 size={14} />Desfazer última mudança</button>}
-        {usage?.enabled && <small className="muted">{usage.used}/{usage.limit} no mês</small>}
+        {usage?.enabled && <small className="muted">{usage.used}/{usage.limit} no mês · <Link href="/sora">histórico</Link></small>}
       </div>
 
       {disabled ? (
@@ -543,6 +559,7 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
                 <div key={i} className={`bubble${m.role === 'user' ? ' own' : ''}`}>
                   {m.text}
                   {m.changed && <small>Fluxograma atualizado (ainda não salvo)</small>}
+                  {m.id && m.payload?.catalog?.length ? <SoraCatalogCard messageId={m.id} changes={m.payload.catalog} appliedAt={m.payload.catalogAppliedAt} /> : null}
                 </div>
               ))}
               {busy && <div className="bubble"><span className="spinner" /> Montando…</div>}

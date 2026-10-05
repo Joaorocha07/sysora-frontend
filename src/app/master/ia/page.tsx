@@ -107,7 +107,7 @@ export default function MasterAiPage() {
         </div>
 
         <div className="card card-pad stack">
-          <div><h3>Por empresa (este mês)</h3><small>Limite de {data.monthlyLimitPerCompany} pedidos à Sora por empresa por mês.</small></div>
+          <div><h3>Por empresa (este mês)</h3><small>Limite de {data.monthlyLimitPerCompany} pedidos à Sora por conta por mês (as empresas da mesma conta dividem).</small></div>
           {data.byCompany.length ? (
             <div className="table-wrap">
               <table className="table">

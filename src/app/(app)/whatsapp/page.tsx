@@ -339,6 +339,11 @@ function BotSettings({ tab, onOpenFlow }: { tab: Exclude<Tab, 'conexao' | 'fluxo
 export default function WhatsAppPage() {
   const { company } = useAuth();
   const [tab, setTab] = useState<Tab>('conexao');
+  // Link direto para uma aba (ex.: /whatsapp?aba=fluxo, vindo do menu Sora).
+  useEffect(() => {
+    const aba = new URLSearchParams(window.location.search).get('aba') as Tab | null;
+    if (aba && TABS.some((t) => t.id === aba)) setTab(aba);
+  }, []);
   const [codesEnabled, setCodesEnabled] = useState(false);
   useEffect(() => { settingsApi.get().then((r) => setCodesEnabled(Boolean(r.settings.emailCodesEnabled))).catch(() => {}); }, []);
   const confirmLeave = useConfirmLeave();

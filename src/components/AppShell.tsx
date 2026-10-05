@@ -69,6 +69,7 @@ const MAIN_NAV: NavItem[] = [
 ];
 const ADMIN_NAV: NavItem[] = [
   { href: '/whatsapp', label: 'WhatsApp', icon: QrCode, adminOnly: true },
+  { href: '/sora', label: 'Sora', icon: Sparkles, adminOnly: true },
   { href: '/equipe', label: 'Equipe', icon: UserCog, adminOnly: true },
   // Funcionários também abrem esta tela (aba Minha conta), mas ela só aparece no menu do admin.
   { href: '/configuracoes', label: 'Configurações', icon: Settings },

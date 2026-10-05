@@ -803,3 +803,30 @@ button.price-card.selected { box-shadow: 0 0 0 2px var(--ink); }
 
 /* Botão com cara de link (textos de ajuda) */
 .btn-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* Menu Sora: histórico à esquerda, conversa à direita (empilha no celular) */
+.sora-page { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.sora-list { padding: 14px; display: grid; gap: 10px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+.sora-list-items { display: grid; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.sora-list-item { display: flex; align-items: center; gap: 4px; border-radius: 10px; }
+.sora-list-item > button:first-child { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 10px; color: inherit; font: inherit; cursor: pointer; display: grid; gap: 2px; }
+.sora-list-item > button:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.sora-list-item > button:first-child small { color: var(--muted); font-size: 12px; }
+.sora-list-item:hover, .sora-list-item.on { background: var(--surface-2); }
+.sora-list-item .icon-btn { width: 30px; height: 30px; opacity: .6; }
+.sora-main { padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sora-thread { display: flex; flex-direction: column; gap: 8px; min-height: 320px; max-height: 62vh; overflow-y: auto; padding: 4px 2px; }
+.sora-thread .bubble { max-width: min(640px, 88%); }
+.sora-empty { display: grid; gap: 10px; margin: auto 0; }
+.sora-catalog { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); white-space: normal; }
+.sora-catalog ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sora-catalog li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.sora-catalog li svg { flex-shrink: 0; margin-top: 3px; }
+.sora-catalog small { color: var(--muted); }
+.sora-catalog .btn { justify-self: start; }
+@media (max-width: 820px) {
+  .sora-page { grid-template-columns: 1fr; }
+  .sora-list { position: static; }
+  .sora-list-items { max-height: 180px; }
+  .sora-thread { max-height: 60vh; min-height: 260px; }
+}

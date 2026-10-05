@@ -98,6 +98,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
   const [emailCodes, setEmailCodes] = useState(Boolean(company.emailCodesEnabled));
   const [plan, setPlan] = useState<PlanId>(company.subscription.plan);
   const [status, setStatus] = useState<SubscriptionStatus>(company.subscription.status);
+  const [complimentary, setComplimentary] = useState(Boolean(company.subscription.complimentary));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const sub = company.subscription;
@@ -109,7 +110,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
     setBusy(true);
     try {
       await adminApi.updateCompany(company.id, { name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null, active, emailCodesEnabled: emailCodes });
-      if (plan !== sub.plan || status !== sub.status) await adminApi.updateAccount(sub.accountId, { plan, status });
+      if (plan !== sub.plan || status !== sub.status || complimentary !== Boolean(sub.complimentary)) await adminApi.updateAccount(sub.accountId, { plan, status, complimentary });
       onSaved('Empresa atualizada.');
     } catch (err) {
       setError(errorMessage(err));
@@ -150,6 +151,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
             {(Object.keys(STATUS_LABEL) as SubscriptionStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
         </Field>
+        <Switch checked={complimentary} onChange={setComplimentary} label="Cortesia (sem cobrança)" description="Para testes e parceiros: o plano funciona normalmente, mas a conta não entra na receita nem nas contas pagantes." />
         <div className="divider" />
         <div className="eyebrow">Empresa</div>
         <div className="grid-2">
@@ -211,7 +213,7 @@ export default function MasterPage() {
 
   const filtered = companies.filter((c) => `${c.name} ${c.email ?? ''} ${c.admins.map((a) => a.email).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const metrics = stats ? [
-    { label: 'Receita mensal', value: money(stats.mrrCents), hint: `${stats.payingAccounts} contas pagantes`, icon: TrendingUp },
+    { label: 'Receita mensal', value: money(stats.mrrCents), hint: `${stats.payingAccounts} contas pagantes${stats.complimentaryAccounts ? ` · ${stats.complimentaryAccounts} cortesia` : ''}`, icon: TrendingUp },
     { label: 'Em teste grátis', value: stats.trialAccounts, hint: `${stats.accounts} contas no total`, icon: Sparkles },
     { label: 'Empresas', value: stats.companies, hint: `${stats.whatsappConnected} com WhatsApp conectado`, icon: Building2 },
     { label: 'Agendamentos no mês', value: stats.appointmentsThisMonth, hint: `${stats.clients} clientes cadastrados`, icon: CreditCard },
@@ -268,9 +270,12 @@ export default function MasterPage() {
                         <div className="row-wrap" style={{ gap: 6 }}>
                           <span className="badge plain">{c.subscription.planName}</span>
                           <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                          {c.subscription.complimentary && <span className="badge dashed">Cortesia</span>}
                         </div>
                         <small style={{ display: 'block', marginTop: 4 }}>
-                          {money(c.subscription.priceCents)}/mês · {c.subscription.status === 'TRIAL' ? `teste até ${shortIso(c.subscription.trialEndsAt)}` : `pago até ${shortIso(c.subscription.paidUntil)}`}
+                          {c.subscription.complimentary
+                            ? `sem cobrança · ${c.subscription.paidUntil ? `até ${shortIso(c.subscription.paidUntil)}` : 'sem vencimento'}`
+                            : `${money(c.subscription.priceCents)}/mês · ${c.subscription.status === 'TRIAL' ? `teste até ${shortIso(c.subscription.trialEndsAt)}` : `pago até ${shortIso(c.subscription.paidUntil)}`}`}
                         </small>
                       </td>
                       <td className="hide-mobile">

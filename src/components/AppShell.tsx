@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   AlertTriangle, ArrowUpRight, Building2, CalendarDays, ChevronDown, ClipboardList, CreditCard, Eye, LayoutDashboard, LogOut, Menu, MessageCircle, QrCode,
-  Settings, ShieldCheck, Sparkles, Tags, Users, UserCog, X,
+  Repeat, Settings, ShieldCheck, Sparkles, Tags, Users, UserCog, X,
 } from 'lucide-react';
 import Logo from './Logo';
 import LogoutDialog from './LogoutDialog';
@@ -13,7 +13,7 @@ import ThemeToggle from './ThemeToggle';
 import { useConfirmLeave } from './UnsavedChanges';
 import { Avatar, Loading, Modal, useToast } from './ui';
 import {
-  authApi, conversationsApi, errorMessage, subscribeNotice, subscribeSubscriptionBlocked, surveyApi, usersApi, whatsappApi, type CompanyChoice, type Subscription,
+  authApi, conversationsApi, errorMessage, settingsApi, subscribeNotice, subscribeSubscriptionBlocked, surveyApi, usersApi, whatsappApi, type CompanyChoice, type Subscription,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { demoMode } from '@/lib/demo';
@@ -67,6 +67,9 @@ const MAIN_NAV: NavItem[] = [
   { href: '/conversas', label: 'Conversas', icon: MessageCircle },
   { href: '/servicos', label: 'Catálogo', icon: Tags },
 ];
+// Só nas empresas liberadas pelo admin master (settings.clientSubscriptionsEnabled):
+// entra no lugar da Agenda (a empresa vende por mês e não usa horários).
+const SUBSCRIBERS_NAV: NavItem = { href: '/assinantes', label: 'Assinaturas', icon: Repeat };
 const ADMIN_NAV: NavItem[] = [
   { href: '/whatsapp', label: 'WhatsApp', icon: QrCode, adminOnly: true },
   { href: '/sora', label: 'Sora', icon: Sparkles, adminOnly: true },
@@ -76,7 +79,7 @@ const ADMIN_NAV: NavItem[] = [
   // Liberada mesmo com a assinatura vencida (é onde o cliente regulariza).
   { href: '/assinatura', label: 'Assinatura', icon: CreditCard },
 ];
-const ALL_NAV = [...MAIN_NAV, ...ADMIN_NAV];
+const ALL_NAV = [...MAIN_NAV, SUBSCRIBERS_NAV, ...ADMIN_NAV];
 
 // Contadores do menu, compartilhados com as páginas (ex.: conversa lida).
 type ShellState = { unread: number; pendingUsers: number; whatsappConnected: boolean | null; refreshBadges: () => void };
@@ -94,6 +97,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [unread, setUnread] = useState(0);
   const [pendingUsers, setPendingUsers] = useState(0);
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
+  const [subscribersOn, setSubscribersOn] = useState(false);
   const [demo, setDemo] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   // Convite da pesquisa inicial: aparece uma vez, no login (depois, só o aviso no painel).
@@ -153,6 +157,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     if (status !== 'authenticated' || !company) return;
     refreshBadges();
     authApi.companies().then(setCompanies).catch(() => {});
+    settingsApi.get().then((r) => setSubscribersOn(Boolean(r.settings.clientSubscriptionsEnabled))).catch(() => setSubscribersOn(false));
     const timer = setInterval(refreshBadges, 30_000);
     return () => clearInterval(timer);
   }, [status, company, refreshBadges]);
@@ -203,7 +208,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <Logo kind="wordmark" tone="white" className="word" />
           </div>
           <div className="nav-label">Principal</div>
-          <nav className="nav">{MAIN_NAV.map(navLink)}</nav>
+          <nav className="nav">{(subscribersOn ? MAIN_NAV.map((n) => (n.href === '/agenda' ? SUBSCRIBERS_NAV : n)) : MAIN_NAV).map(navLink)}</nav>
           {isAdmin && (
             <>
               <div className="nav-label">Gestão</div>

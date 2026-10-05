@@ -82,6 +82,8 @@ export type Settings = {
   whatsappConnected: boolean; whatsappPhone: string | null;
   // "Receber código" (códigos por e-mail): liberado pelo admin master.
   emailCodesEnabled?: boolean;
+  // Assinaturas dos clientes (menu Assinaturas, no lugar da Agenda): liberado pelo admin master.
+  clientSubscriptionsEnabled?: boolean;
   botEnabled: boolean; autoCreateClient: boolean; askName: boolean; botAiEnabled: boolean; transcribeAudio: boolean;
   greetingMessage: string; handoffMessage: string; confirmationMessage: string;
   reminderEnabled: boolean; reminderTime: string; reminderMessage: string;
@@ -157,6 +159,7 @@ export type AdminCompany = {
   id: string; name: string; slug: string; document: string | null; phone: string | null; email: string | null;
   subscription: Subscription; active: boolean; selfSignup: boolean; inviteCode: string; createdAt: string; whatsappConnected: boolean; whatsappPhone: string | null;
   emailCodesEnabled?: boolean;
+  clientSubscriptionsEnabled?: boolean;
   users: number; admins: { id: string; name: string; email: string; avatarUrl: string | null }[]; clients: number; appointments: number; services: number;
 };
 // Pessoa cadastrada na Sysora (painel master > Usuários).
@@ -404,7 +407,8 @@ export const adminApi = {
   companies: () => get<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies),
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>
     send<{ adminAlreadyExisted: boolean }>('POST', '/admin/companies', input),
-  updateCompany: (id: string, input: Partial<CompanyInput> & { active?: boolean; emailCodesEnabled?: boolean }) => send('PATCH', `/admin/companies/${id}`, input),
+  updateCompany: (id: string, input: Partial<CompanyInput> & { active?: boolean; emailCodesEnabled?: boolean; clientSubscriptionsEnabled?: boolean }) =>
+    send('PATCH', `/admin/companies/${id}`, input),
   // confirmName: nome da empresa digitado (trava do backend contra exclusão por engano).
   deleteCompany: (id: string, confirmName: string) => send('DELETE', `/admin/companies/${id}`, { confirmName }),
   updateAccount: (accountId: string, input: AccountInput) =>
@@ -488,6 +492,31 @@ export const emailCodesApi = {
   test: (id: string) => send<{ found: FoundEmailCode | null }>('POST', `/email-codes/${id}/test`).then((r) => r.found),
   setInboxClients: (id: string, ids: string[]) => send<{ inbox: EmailInbox }>('PUT', `/email-codes/${id}/clients`, { ids }).then((r) => r.inbox),
   setClientInboxes: (clientId: string, ids: string[]) => send('PUT', `/email-codes/clients/${clientId}`, { ids }),
+};
+
+// Assinatura de um cliente (produto vendido por mês). Cada registro é um
+// período pago: data da compra e vencimento (AAAA-MM-DD). Na lista, o período
+// atual de cada cliente e quantos ele já pagou (periods).
+export type ClientSubscription = {
+  id: string; clientId: string; serviceId: string | null; name: string; priceCents: number;
+  startDate: string; dueDate: string; source: Source; notes: string | null; canceledAt: string | null; createdAt: string;
+  client: { id: string; name: string; phone: string };
+  service: { id: string; name: string; accessEmail: string | null } | null;
+  periods?: number;
+};
+export type ClientSubscriptionInput = {
+  clientId: string; serviceId?: string | null; name?: string; priceCents?: number; startDate: string; dueDate?: string; months?: number; notes?: string | null;
+};
+export const clientSubscriptionsApi = {
+  list: () => get<{ subscriptions: ClientSubscription[] }>('/client-subscriptions').then((r) => r.subscriptions),
+  ofClient: (clientId: string) => get<{ subscriptions: ClientSubscription[] }>(`/client-subscriptions/client/${clientId}`).then((r) => r.subscriptions),
+  create: (input: ClientSubscriptionInput) => send<{ subscription: ClientSubscription }>('POST', '/client-subscriptions', input).then((r) => r.subscription),
+  renew: (id: string, input: { startDate?: string; months?: number; priceCents?: number; notes?: string | null }) =>
+    send<{ subscription: ClientSubscription }>('POST', `/client-subscriptions/${id}/renew`, input).then((r) => r.subscription),
+  update: (id: string, input: Partial<Pick<ClientSubscriptionInput, 'name' | 'priceCents' | 'startDate' | 'dueDate' | 'notes'>>) =>
+    send<{ subscription: ClientSubscription }>('PATCH', `/client-subscriptions/${id}`, input).then((r) => r.subscription),
+  cancel: (id: string) => send<{ subscription: ClientSubscription }>('POST', `/client-subscriptions/${id}/cancel`).then((r) => r.subscription),
+  remove: (id: string) => send('DELETE', `/client-subscriptions/${id}`),
 };
 
 export type ClientInput = { name: string; phone: string; email?: string | null; birthday?: string | null; notes?: string | null; reminders?: boolean };

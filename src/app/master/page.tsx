@@ -96,6 +96,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
   const [form, setForm] = useState({ name: company.name, document: company.document ?? '', phone: company.phone ?? '', email: company.email ?? '' });
   const [active, setActive] = useState(company.active);
   const [emailCodes, setEmailCodes] = useState(Boolean(company.emailCodesEnabled));
+  const [clientSubscriptions, setClientSubscriptions] = useState(Boolean(company.clientSubscriptionsEnabled));
   const [plan, setPlan] = useState<PlanId>(company.subscription.plan);
   const [status, setStatus] = useState<SubscriptionStatus>(company.subscription.status);
   const [complimentary, setComplimentary] = useState(Boolean(company.subscription.complimentary));
@@ -109,7 +110,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
     setError(null);
     setBusy(true);
     try {
-      await adminApi.updateCompany(company.id, { name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null, active, emailCodesEnabled: emailCodes });
+      await adminApi.updateCompany(company.id, { name: form.name, document: form.document || null, phone: form.phone || null, email: form.email || null, active, emailCodesEnabled: emailCodes, clientSubscriptionsEnabled: clientSubscriptions });
       if (plan !== sub.plan || status !== sub.status || complimentary !== Boolean(sub.complimentary)) await adminApi.updateAccount(sub.accountId, { plan, status, complimentary });
       onSaved('Empresa atualizada.');
     } catch (err) {
@@ -162,6 +163,7 @@ function EditCompanyModal({ company, onClose, onSaved }: { company: AdminCompany
         </div>
         <Switch checked={active} onChange={setActive} label="Empresa ativa" description="Desativada, ninguém da empresa consegue entrar e o WhatsApp dela é desconectado." />
         <Switch checked={emailCodes} onChange={setEmailCodes} label="Códigos por e-mail" description="Libera a aba Códigos por e-mail e a opção “Receber código de acesso” no bot desta empresa." />
+        <Switch checked={clientSubscriptions} onChange={setClientSubscriptions} label="Assinaturas de clientes" description="Troca a Agenda do menu por Assinaturas (data da compra e vencimento de cada cliente). O bot registra sozinho a venda das contas de acesso como assinatura de 1 mês e avisa o cliente quando vence." />
       </form>
     </Modal>
   );

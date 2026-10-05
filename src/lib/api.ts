@@ -366,7 +366,8 @@ export const authApi = {
 export type CompanyInput = { name: string; document?: string | null; phone?: string | null; email?: string | null };
 export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEndsAt?: string | null; paidUntil?: string | null; complimentary?: boolean };
 // Configurações da plataforma, editadas pelo admin master.
-export type PlatformSettings = { publicSignupEnabled: boolean; aiCreditCents: number };
+// usdBrlRate: cotação do dólar (R$ por US$ 1) para o gasto da IA em reais (página Gastos).
+export type PlatformSettings = { publicSignupEnabled: boolean; aiCreditCents: number; usdBrlRate: number };
 // Gastos com IA (Sora), estimados pelos tokens de cada chamada.
 export type AiUsageSummary = {
   configured: boolean; model: string; monthlyLimitPerCompany: number;
@@ -375,12 +376,30 @@ export type AiUsageSummary = {
   byCompany: { companyId: string | null; name: string; calls: number; spentUsd: number }[];
   recent: { id: string; company: string; feature: string; model: string; inputTokens: number; outputTokens: number; costUsd: number; createdAt: string }[];
 };
+// Gastos da Sysora (painel master): cadastrados em reais + IA convertida pela cotação.
+export type ExpenseCategory = 'infraestrutura' | 'ferramentas' | 'marketing' | 'impostos' | 'pessoal' | 'outros';
+// date: dia do gasto (único) ou início (mensal). endDate: último mês do mensal (nulo = continua).
+export type Expense = {
+  id: string; description: string; category: ExpenseCategory; amountCents: number;
+  date: string; recurring: boolean; endDate: string | null; notes: string | null;
+};
+export type ExpenseInput = Omit<Expense, 'id'>;
+export type ExpensesSummary = {
+  month: string; rate: number; revenueCents: number; expenses: Expense[];
+  ai: { usd: number; brlCents: number; byFeature: { feature: string; calls: number; usd: number; brlCents: number }[] };
+  totals: { manualCents: number; aiCents: number; totalCents: number };
+  history: { month: string; manualCents: number; aiCents: number }[];
+};
 export const adminApi = {
   stats: () => get<AdminStats>('/admin/stats'),
   settings: () => get<{ settings: PlatformSettings }>('/admin/settings').then((r) => r.settings),
   updateSettings: (input: Partial<PlatformSettings>) =>
     send<{ settings: PlatformSettings }>('PATCH', '/admin/settings', input).then((r) => r.settings),
   aiUsage: () => get<AiUsageSummary>('/admin/ai-usage'),
+  expenses: (month: string) => get<ExpensesSummary>(`/admin/expenses?month=${month}`),
+  createExpense: (input: ExpenseInput) => send<{ expense: Expense }>('POST', '/admin/expenses', input).then((r) => r.expense),
+  updateExpense: (id: string, input: Partial<ExpenseInput>) => send<{ expense: Expense }>('PATCH', `/admin/expenses/${id}`, input).then((r) => r.expense),
+  deleteExpense: (id: string) => send('DELETE', `/admin/expenses/${id}`),
   users: () => get<{ users: AdminUser[] }>('/admin/users').then((r) => r.users),
   companies: () => get<{ companies: AdminCompany[] }>('/admin/companies').then((r) => r.companies),
   createCompany: (input: CompanyInput & { plan: PlanId; trial: boolean; admin: { name: string; email: string; password: string } }) =>

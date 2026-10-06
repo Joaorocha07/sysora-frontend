@@ -6,7 +6,7 @@ import { ArrowLeft, CalendarCheck, CalendarX2, Check, Clock, FileText, MapPin, M
 import Logo from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
 import { Empty, Field, FormError } from '@/components/ui';
-import { bookingApi, errorMessage, type PublicBooking, type PublicBookingResult } from '@/lib/api';
+import { ApiError, bookingApi, errorMessage, type BookedFromLink, type PublicBooking, type PublicBookingResult } from '@/lib/api';
 import { WEEKDAYS_LONG, addDays, brDate, duration, longDate, money, shortDate, today, weekday } from '@/lib/format';
 
 // Agendamento pelo link pessoal que o bot manda no WhatsApp. O cliente já vem
@@ -44,8 +44,12 @@ export default function BookingPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<(PublicBookingResult & { notified: boolean; receiptUrl: string; address: string | null }) | null>(null);
 
+  // Link de uso único: aberto de novo depois de agendar, mostra o agendamento feito.
+  const [booked, setBooked] = useState<BookedFromLink | null>(null);
+
   useEffect(() => {
     bookingApi.get(token).then((b) => {
+      if (b.booked) return setBooked(b.booked);
       setBooking(b);
       // Um serviço só: já vai para os dias.
       if (b.services.length === 1) chooseServices([b.services[0].id]);
@@ -92,6 +96,11 @@ export default function BookingPage() {
       const result = await bookingApi.book(token, { serviceIds, date, time, name: booking?.client.name ? undefined : name.trim() });
       setDone({ ...result.appointment, notified: result.notified, receiptUrl: result.receiptUrl, address: result.address });
     } catch (err) {
+      // Já agendou por este link (ex.: em outra aba): mostra o agendamento feito.
+      if (err instanceof ApiError && err.code === 'LINK_USED') {
+        bookingApi.get(token).then((b) => { if (b.booked) setBooked(b.booked); }).catch(() => setError(errorMessage(err)));
+        return;
+      }
       setError(errorMessage(err));
       // Horário ocupado (ou passou) enquanto escolhia: atualiza a lista.
       bookingApi.times(token, serviceIds, date).then(setTimes).catch(() => {});
@@ -106,6 +115,36 @@ export default function BookingPage() {
       <ThemeToggle />
     </header>
   );
+
+  if (booked) {
+    const a = booked.appointment;
+    const canceled = a?.status === 'CANCELED';
+    return (
+      <main className="booking-page">
+        {header}
+        <div className="card">
+          {a ? (
+            <div className="card-body stack" style={{ justifyItems: 'center', textAlign: 'center', paddingTop: 32 }}>
+              <span className="metric-icon">{canceled ? <CalendarX2 size={20} /> : <Check size={20} />}</span>
+              <h1 style={{ fontSize: 24 }}>{canceled ? 'Agendamento cancelado' : 'Agendamento confirmado'}</h1>
+              {booked.company && <div className="eyebrow">{booked.company.name}</div>}
+              <p className="muted">{a.services.join(' + ')}</p>
+              <p><strong>{dayLabel(a.date)}</strong>, às <strong>{a.startTime}</strong> (até {a.endTime})</p>
+              {a.totalCents > 0 && <p className="muted">Valor: {money(a.totalCents)}</p>}
+              {booked.company?.address && <p className="muted"><MapPin size={15} style={{ verticalAlign: -3, marginRight: 6 }} />{booked.company.address}</p>}
+              {a.receiptUrl && <a className="btn btn-primary" href={new URL(a.receiptUrl).pathname}><FileText size={16} />Ver comprovante</a>}
+              <p className="muted">
+                <MessageCircle size={15} style={{ verticalAlign: -3, marginRight: 6 }} />
+                {canceled ? 'Para marcar outro horário, peça um novo link pelo WhatsApp.' : 'Este link já foi usado. Para remarcar ou marcar outro horário, fale com a empresa pelo WhatsApp.'}
+              </p>
+            </div>
+          ) : (
+            <Empty icon={<CalendarX2 size={22} />} title="Este link já foi usado" text="Para marcar um horário, peça um novo link pelo WhatsApp." />
+          )}
+        </div>
+      </main>
+    );
+  }
 
   if (loadError || !booking) {
     return (

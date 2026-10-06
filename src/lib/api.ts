@@ -534,8 +534,14 @@ export type PublicBooking = {
   services: { id: string; name: string; description: string | null; durationMinutes: number; priceCents: number }[];
   hours: { openingTime: string; closingTime: string; workDays: number[] };
   expiresAt: string;
+  booked: null;
 };
 export type PublicBookingResult = { date: string; startTime: string; endTime: string; totalCents: number; services: string[] };
+// Link já usado (é de uso único): o agendamento que saiu dele. appointment nulo = foi excluído.
+export type BookedFromLink = {
+  company: { name: string; address: string | null } | null;
+  appointment: (PublicBookingResult & { status: AppointmentStatus; receiptUrl: string | null }) | null;
+};
 // notified: a confirmação foi para o WhatsApp do cliente (empresa conectada).
 // Comprovante do agendamento pelo link (página /comprovante/[token]).
 export type BookingReceipt = {
@@ -546,7 +552,7 @@ export type BookingReceipt = {
   createdAt: string;
 };
 export const bookingApi = {
-  get: (token: string) => get<PublicBooking>(`/booking/${encodeURIComponent(token)}`),
+  get: (token: string) => get<PublicBooking | { booked: BookedFromLink }>(`/booking/${encodeURIComponent(token)}`),
   days: (token: string, serviceIds: string[]) =>
     get<{ days: string[] }>(`/booking/${encodeURIComponent(token)}/days${qs({ services: serviceIds.join(',') })}`).then((r) => r.days),
   times: (token: string, serviceIds: string[], date: string) =>

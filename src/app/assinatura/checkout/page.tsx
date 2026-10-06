@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type FormEvent, Suspense, useEffect, useState } from 'react';
+import { type FormEvent, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   CardNumber,
   ExpirationDate,
   SecurityCode,
   createCardToken,
-  getInstallments,
   initMercadoPago,
 } from '@mercadopago/sdk-react';
 import { ArrowLeft, Banknote, CalendarDays, Check, CheckCircle, Copy, CreditCard, Lock, QrCode, User } from 'lucide-react';
@@ -27,18 +26,25 @@ if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
 
 type Tab = 'card' | 'pix';
 
+// Os campos do cartão são iframes do Mercado Pago: não herdam o CSS da página,
+// então as cores seguem o tema (data-theme no <html>) aqui.
+type Theme = 'light' | 'dark';
+const MP_STYLES = {
+  light: { height: '42px', fontSize: '15px', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#0a0a0a', placeholderColor: '#a3a3a3' },
+  dark: { height: '42px', fontSize: '15px', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#f5f5f5', placeholderColor: '#737373' },
+} as const;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mpStyle: any = {
-  base: {
-    width: '100%',
-    height: '42px',
-    fontSize: '15px',
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    color: '#0a0a0a',
-  },
-  placeholder: { color: '#a3a3a3' },
-};
+function usePageTheme(): Theme {
+  const [theme, setTheme] = useState<Theme>('light');
+  useEffect(() => {
+    const read = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
 
 // Parcelas do cartão no plano anual, como o Mercado Pago calcula para a bandeira/banco do cartão.
 type CardInstallments = {
@@ -47,6 +53,41 @@ type CardInstallments = {
   options: { installments: number; label: string }[];
 };
 
+// Erro do número do cartão vindo do campo seguro do Mercado Pago.
+type CardNumberError = 'incomplete' | 'invalid' | null;
+type CardValidity = { errorMessages?: { cause?: string }[] };
+const cardNumberError = (arg: CardValidity): CardNumberError => {
+  const causes = (arg.errorMessages ?? []).map((e) => e.cause);
+  if (!causes.length) return null;
+  return causes.every((c) => c === 'invalid_length') ? 'incomplete' : 'invalid';
+};
+
+// Parcelas pela API pública do Mercado Pago (a mesma que o getInstallments do SDK
+// usa). Chamada direta porque o SDK escreve "failed to get installments" no
+// console quando o cartão não é reconhecido; aqui isso vira só `null`.
+type MpInstallments = {
+  payment_method_id: string;
+  issuer?: { id?: string | number };
+  payer_costs: { installments: number; recommended_message: string }[];
+}[];
+
+async function fetchInstallments(amountCents: number, bin: string): Promise<CardInstallments | null> {
+  const key = process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
+  if (!key) return null;
+  const query = new URLSearchParams({ public_key: key, amount: String(amountCents / 100), bin, locale: 'pt-BR' });
+  const res = await fetch(`https://api.mercadopago.com/v1/payment_methods/installments?${query}`);
+  if (!res.ok) return null;
+  const first = ((await res.json()) as MpInstallments)[0];
+  if (!first?.payer_costs?.length) return null;
+  return {
+    paymentMethodId: first.payment_method_id,
+    issuerId: first.issuer?.id ? String(first.issuer.id) : undefined,
+    options: first.payer_costs
+      .filter((c) => c.installments <= 12)
+      .map((c) => ({ installments: c.installments, label: c.recommended_message })),
+  };
+}
+
 const cyclePrice = (plan: PlanInfo, cycle: BillingCycle) => (cycle === 'YEARLY' ? plan.yearlyPriceCents : plan.priceCents);
 const cycleSuffix = (cycle: BillingCycle) => (cycle === 'YEARLY' ? '/ano' : '/mês');
 
@@ -54,12 +95,24 @@ function CheckoutContent() {
   const router = useRouter();
   const params = useSearchParams();
   const { status, user, reloadSession } = useAuth();
+  // Trocar o tema recria os campos do cartão (o Mercado Pago só aplica o estilo ao montar).
+  const mpStyle = MP_STYLES[usePageTheme()];
 
   const [plans, setPlans] = useState<PlanInfo[]>([]);
   const [planId, setPlanId] = useState<PlanId>((params.get('plan') ?? 'INICIAL') as PlanId);
   const [cycle, setCycle] = useState<BillingCycle>(params.get('ciclo') === 'anual' ? 'YEARLY' : 'MONTHLY');
   const [bin, setBin] = useState<string | null>(null);
   const [cardInstallments, setCardInstallments] = useState<CardInstallments | null>(null);
+  // O Mercado Pago não reconheceu os primeiros dígitos (ex.: cartão de teste com chave de produção).
+  const [cardUnknown, setCardUnknown] = useState(false);
+  const [cardError, setCardError] = useState<CardNumberError>(null);
+  // Só mostra o erro depois que a pessoa sai do campo (enquanto digita o número fica incompleto).
+  const [cardTouched, setCardTouched] = useState(false);
+
+  // Callbacks estáveis: o campo do Mercado Pago é recriado (e apagado) quando uma prop muda.
+  const onCardBin = useCallback((e: { bin?: string | null } | undefined) => setBin(e?.bin ?? null), []);
+  const onCardValidity = useCallback((e: CardValidity) => setCardError(cardNumberError(e)), []);
+  const onCardBlur = useCallback(() => setCardTouched(true), []);
   const [tab, setTab] = useState<Tab>('card');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,22 +152,17 @@ function CheckoutContent() {
   // Anual: com os primeiros dígitos do cartão, busca no Mercado Pago a bandeira e as parcelas.
   useEffect(() => {
     setCardInstallments(null);
+    setCardUnknown(false);
     setInstallments(1);
     if (cycle !== 'YEARLY' || !bin || !price) return;
     let alive = true;
-    getInstallments({ amount: String(price / 100), bin, locale: 'pt-BR' })
+    fetchInstallments(price, bin)
       .then((result) => {
-        const first = result?.[0];
-        if (!alive || !first) return;
-        setCardInstallments({
-          paymentMethodId: first.payment_method_id,
-          issuerId: first.issuer?.id ? String(first.issuer.id) : undefined,
-          options: first.payer_costs
-            .filter((c) => c.installments <= 12)
-            .map((c) => ({ installments: c.installments, label: c.recommended_message })),
-        });
+        if (!alive) return;
+        if (result) setCardInstallments(result);
+        else setCardUnknown(true);
       })
-      .catch(() => { /* sem parcelas: o envio avisa que não reconheceu o cartão */ });
+      .catch(() => { if (alive) setCardUnknown(true); });
     return () => { alive = false; };
   }, [cycle, bin, price]);
 
@@ -137,6 +185,7 @@ function CheckoutContent() {
   async function submitCard(e: FormEvent) {
     e.preventDefault();
     if (!plan || !user) return;
+    if (cardError) { setCardTouched(true); return; }
     setBusy(true);
     setError(null);
     try {
@@ -146,7 +195,7 @@ function CheckoutContent() {
         identificationNumber: cpf.replace(/\D/g, ''),
       });
       if (!token?.id) throw new Error('Não foi possível tokenizar o cartão. Verifique os dados e tente novamente.');
-      if (cycle === 'YEARLY' && !cardInstallments) throw new Error('Não foi possível identificar a bandeira do cartão. Confira o número.');
+      if (cycle === 'YEARLY' && !cardInstallments) throw new Error('O Mercado Pago não reconheceu este cartão. Confira o número ou pague com Pix.');
       const result = await subscriptionsApi.checkout({
         cardTokenId: token.id, payerEmail: user.email, plan: plan.id, cycle,
         ...(cycle === 'YEARLY' && cardInstallments
@@ -380,9 +429,19 @@ function CheckoutContent() {
                     <div className="input-icon">
                       <CreditCard size={17} />
                       <div className="input checkout-secure-field">
-                        <CardNumber placeholder="1234 5678 9012 3456" style={mpStyle} onBinChange={(e) => setBin(e?.bin ?? null)} />
+                        <CardNumber
+                          placeholder="1234 5678 9012 3456"
+                          style={mpStyle}
+                          enableLuhnValidation
+                          onBinChange={onCardBin}
+                          onValidityChange={onCardValidity}
+                          onBlur={onCardBlur}
+                        />
                       </div>
                     </div>
+                    {cardTouched && cardError === 'invalid' && <small className="field-error">Número de cartão inválido. Confira os dígitos.</small>}
+                    {cardTouched && cardError === 'incomplete' && <small className="field-error">Número do cartão incompleto.</small>}
+                    {!cardError && cardUnknown && <small className="field-error">O Mercado Pago não reconheceu este cartão. Confira o número ou pague com Pix.</small>}
                   </label>
                   <div className="grid-2">
                     <label className="field">
@@ -419,7 +478,7 @@ function CheckoutContent() {
                         >
                           {cardInstallments
                             ? cardInstallments.options.map((o) => <option key={o.installments} value={o.installments}>{o.label}</option>)
-                            : <option value={1}>{bin ? 'Buscando parcelas...' : 'Digite o número do cartão para ver as parcelas'}</option>}
+                            : <option value={1}>{cardUnknown ? 'Cartão não reconhecido' : bin ? 'Buscando parcelas...' : 'Digite o número do cartão para ver as parcelas'}</option>}
                         </select>
                       </div>
                     </label>

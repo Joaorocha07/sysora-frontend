@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { ConfirmDialog, Field, Loading, Modal, useToast } from '@/components/ui';
 import { useConfirmLeave, useUnsavedChanges } from '@/components/UnsavedChanges';
-import { AiPlanBadge, AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
+import { AiPlanBadge, AiPlanNotice, soraPercent, useAiPlan, useSoraPlan } from '@/components/AiPlanLock';
 import {
   SORA_FLOW_DRAFT_KEY, errorMessage, servicesApi, settingsApi, soraApi, whatsappApi,
   type BotFlow, type BotFlowSummary, type FlowAction, type FlowNode, type FlowNodeType, type FlowTemplate, type Service, type Settings, type SoraStoredMessage, type SoraUsage,
@@ -136,8 +136,9 @@ function bubblesOf(root: FlowNode, node: FlowNode, parent: FlowNode | null, vars
 export function BotFlowEditor() {
   const toast = useToast();
   const { company } = useAuth();
-  // Sora e teste com texto livre: só no plano Avançado pago.
+  // Sora: planos pagos. Teste com texto livre (IA do atendimento): só no Avançado pago.
   const ai = useAiPlan();
+  const sora = useSoraPlan();
   const [saved, setSaved] = useState<FlowNode | null>(null);
   const [flow, setFlow] = useState<FlowNode | null>(null);
   // Fluxos da empresa e o que está aberto no editor.
@@ -358,7 +359,7 @@ export function BotFlowEditor() {
             <p className="muted" style={{ marginTop: 4 }}>Clique numa etapa para editar. Cada opção de um menu vira um número que o cliente responde. Use {'{nome}'} e {'{empresa}'} nos textos.</p>
             <div className="segmented" style={{ marginTop: 12, width: 'fit-content' }}>
               <button type="button" className={mode === 'manual' ? 'on' : ''} onClick={() => setMode('manual')}><PenLine size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Montar manual</button>
-              <button type="button" className={mode === 'sora' ? 'on' : ''} onClick={() => setMode('sora')}><Sparkles size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Criar com a Sora{!ai && <AiPlanBadge />}</button>
+              <button type="button" className={mode === 'sora' ? 'on' : ''} onClick={() => setMode('sora')}><Sparkles size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Criar com a Sora{!sora && <AiPlanBadge paid />}</button>
             </div>
           </div>
           <div className="row-wrap">
@@ -375,11 +376,11 @@ export function BotFlowEditor() {
         </div>
       </div>
 
-      {mode === 'sora' && !ai && (
-        <div className="card card-pad"><AiPlanNotice feature="A Sora, IA que monta o fluxo para você," /></div>
+      {mode === 'sora' && !sora && (
+        <div className="card card-pad"><AiPlanNotice paid feature="A Sora, IA que monta o fluxo para você," /></div>
       )}
 
-      {mode === 'sora' && ai && (
+      {mode === 'sora' && sora && (
         <SoraPanel
           flow={flow}
           problems={problems}
@@ -725,7 +726,7 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
           <small style={{ display: 'block' }} className="muted">Descreva o atendimento que você quer e eu monto o fluxo. Você revisa no fluxograma antes de salvar.</small>
         </div>
         {canUndo && <button type="button" className="btn btn-ghost btn-sm" onClick={onUndo}><Undo2 size={14} />Desfazer última mudança</button>}
-        {usage?.enabled && <small className="muted">{usage.used}/{usage.limit} no mês · <Link href="/sora">histórico</Link></small>}
+        {usage?.enabled && <small className="muted">{soraPercent(usage.used, usage.limit)}% do limite do mês · <Link href="/sora">histórico</Link></small>}
       </div>
 
       {disabled ? (
@@ -738,7 +739,7 @@ function SoraPanel({ flow, problems, canUndo, onDraft, onUndo }: {
                 <div key={i} className={`bubble${m.role === 'user' ? ' own' : ''}`}>
                   {m.text}
                   {m.changed && <small>Fluxograma atualizado (ainda não salvo)</small>}
-                  {m.id && m.payload?.catalog?.length ? <SoraCatalogCard messageId={m.id} changes={m.payload.catalog} appliedAt={m.payload.catalogAppliedAt} /> : null}
+                  {m.id && (m.payload?.catalog?.length || m.payload?.clients?.length) ? <SoraCatalogCard messageId={m.id} changes={m.payload.catalog ?? []} clients={m.payload.clients ?? []} appliedAt={m.payload.catalogAppliedAt} /> : null}
                 </div>
               ))}
               {busy && <div className="bubble"><span className="spinner" /> Montando…</div>}

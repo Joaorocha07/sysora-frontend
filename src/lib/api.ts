@@ -27,12 +27,14 @@ export type Subscription = {
   accountId: string; plan: PlanId; planName: string; priceCents: number; status: SubscriptionStatus;
   billingCycle?: BillingCycle; yearlyPriceCents?: number;
   trialEndsAt: string | null; paidUntil: string | null; active: boolean; maxCompanies: number; maxEmployees: number;
-  // Recursos de IA liberados: plano Avançado pago (o teste grátis não tem IA).
+  // IA no atendimento (texto livre e áudio) e descrições com IA: plano Avançado pago.
   ai: boolean;
+  // Sora: qualquer plano pago (o teste grátis não tem IA), com limite mensal por plano.
+  sora?: boolean; soraBudgetUsd?: number;
   // Cortesia (teste, parceiro): plano liberado sem cobrança, fora da receita do painel master.
   complimentary?: boolean;
 };
-export type PlanInfo = { id: PlanId; name: string; priceCents: number; yearlyPriceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
+export type PlanInfo = { id: PlanId; name: string; priceCents: number; yearlyPriceCents: number; maxCompanies: number; maxEmployees: number; ai?: boolean; soraBudgetUsd?: number; features: string[] };
 export type Session = {
   accessToken: string; user: AuthUser; company: AuthCompany | null; role: Role | null; subscription: Subscription | null;
   // Aviso do backend (ex.: levado para outra empresa porque o plano da atual venceu).
@@ -136,6 +138,7 @@ export type BotFlow = BotFlowSummary & { flow: FlowNode };
 export type BotFlowList = { flows: BotFlowSummary[]; max: number };
 // Modelos do botão "+": do zero, o padrão ou o de agendamento pelo link.
 export type FlowTemplate = 'vazio' | 'padrao' | 'link';
+// used/limit: gasto do mês e teto do plano, em milionésimos de dólar (mostrados em %).
 export type SoraUsage = { used: number; limit: number; enabled: boolean; allowed: boolean };
 // IA do atendimento (entende texto livre e áudios no WhatsApp).
 export type BotAiStatus = { used: number; limit: number; available: boolean; transcription: boolean; allowed: boolean };
@@ -145,22 +148,26 @@ export type BotAiUnderstood = {
 };
 // Sora com conversas salvas (menu Sora e painel do Fluxo do bot).
 export type SoraCatalogChange = {
-  op: 'create' | 'update'; id: string | null; kind: ServiceKind; name: string; description: string | null;
+  op: 'create' | 'update' | 'delete'; id: string | null; kind: ServiceKind; name: string; description: string | null;
   priceCents: number | null; durationMinutes: number | null; active: boolean | null;
+};
+export type SoraClientChange = {
+  op: 'create' | 'update' | 'delete'; id: string | null; name: string; phone: string | null; email: string | null; notes: string | null;
 };
 export type SoraConversation = { id: string; title: string; source: 'chat' | 'fluxo'; createdAt: string; updatedAt: string; _count?: { messages: number } };
 export type SoraStoredMessage = {
   id: string; role: 'user' | 'assistant'; text: string; createdAt: string;
-  payload: { flow?: FlowNode | null; catalog?: SoraCatalogChange[] | null; catalogAppliedAt?: string } | null;
+  payload: { flow?: FlowNode | null; catalog?: SoraCatalogChange[] | null; clients?: SoraClientChange[] | null; catalogAppliedAt?: string } | null;
 };
 export type SoraSendResult = {
   conversation: SoraConversation; messages: SoraStoredMessage[]; flow: FlowNode | null; catalog: SoraCatalogChange[] | null;
-  usage: { used: number; limit: number };
+  clients?: SoraClientChange[] | null; usage: { used: number; limit: number };
 };
 
 export type Dashboard = {
   clients: number; newClientsMonth: number; todayCount: number; monthAppointments: number; monthCompleted: number;
-  monthRevenueCents: number; botAppointmentsMonth: number; unreadMessages: number; servicesCount: number; pendingUsers: number; hoursReviewed: boolean;
+  // monthRevenueCents: serviços + produtos do mês (atendimentos concluídos e assinaturas vendidas); monthSales: nº de vendas.
+  monthRevenueCents: number; monthSales?: number; botAppointmentsMonth: number; unreadMessages: number; servicesCount: number; pendingUsers: number; hoursReviewed: boolean;
   whatsapp: { whatsappConnected: boolean; whatsappPhone: string | null; botEnabled: boolean };
   today: Appointment[]; upcoming: Appointment[]; week: { date: string; count: number }[];
 };
@@ -391,7 +398,7 @@ export type AccountInput = { plan?: PlanId; status?: SubscriptionStatus; trialEn
 export type PlatformSettings = { publicSignupEnabled: boolean; aiCreditCents: number; usdBrlRate: number };
 // Gastos com IA (Sora), estimados pelos tokens de cada chamada.
 export type AiUsageSummary = {
-  configured: boolean; model: string; monthlyLimitPerCompany: number;
+  configured: boolean; model: string; soraBudgetUsd: Record<PlanId, number>;
   creditUsd: number; spentUsd: number; remainingUsd: number; calls: number;
   month: { spentUsd: number; calls: number; inputTokens: number; outputTokens: number };
   byCompany: { companyId: string | null; name: string; calls: number; spentUsd: number }[];
@@ -701,5 +708,6 @@ export const soraApi = {
   conversation: (id: string) => get<{ conversation: SoraConversation; messages: SoraStoredMessage[] }>(`/sora/conversations/${id}`),
   remove: (id: string) => send('DELETE', `/sora/conversations/${id}`),
   send: (input: { conversationId: string | null; text: string; mode: 'chat' | 'fluxo'; flow?: FlowNode }) => send<SoraSendResult>('POST', '/sora/messages', input),
-  applyCatalog: (messageId: string) => send<{ created: string[]; updated: string[] }>('POST', `/sora/messages/${messageId}/apply-catalog`),
+  // Aplica as mudanças no catálogo e nos clientes de uma resposta (o dono confirmou).
+  applyCatalog: (messageId: string) => send<{ created: string[]; updated: string[]; deleted?: string[]; skipped?: string[] }>('POST', `/sora/messages/${messageId}/apply-catalog`),
 };

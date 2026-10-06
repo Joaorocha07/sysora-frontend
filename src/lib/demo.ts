@@ -56,7 +56,7 @@ function subscription(): Subscription {
     accountId: 'demo-account', plan: plan.id, planName: plan.name, priceCents: plan.priceCents, status: 'TRIAL',
     trialEndsAt, paidUntil: null, active: true, maxCompanies: plan.maxCompanies, maxEmployees: plan.maxEmployees,
     // Como no servidor: o teste grátis não tem IA.
-    ai: false,
+    ai: false, sora: false, soraBudgetUsd: plan.soraBudgetUsd,
   };
 }
 

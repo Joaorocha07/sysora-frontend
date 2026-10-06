@@ -43,7 +43,7 @@ export default function TermsPage() {
 
       <h2>5. Inteligência artificial</h2>
       <p>
-        No plano Avançado, recursos de IA interpretam mensagens, transcrevem áudios e sugerem textos. As respostas podem conter erros: revise o que for importante.
+        Nos planos pagos, a Sora (IA) ajuda a montar o fluxo do bot e o catálogo; no plano Avançado, recursos de IA também interpretam mensagens, transcrevem áudios e sugerem textos. As respostas podem conter erros: revise o que for importante.
         A empresa continua responsável pelo atendimento aos seus clientes.
       </p>
 

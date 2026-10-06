@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageSquarePlus, Send, Sparkles, Trash2, Workflow } from 'lucide-react';
-import { AiPlanNotice, useAiPlan } from '@/components/AiPlanLock';
+import { AiPlanNotice, soraPercent, useSoraPlan } from '@/components/AiPlanLock';
 import { SoraCatalogCard } from '@/components/SoraCatalogCard';
 import { ConfirmDialog, PageHead, useToast } from '@/components/ui';
 import { SORA_FLOW_DRAFT_KEY, errorMessage, soraApi, type SoraConversation, type SoraStoredMessage, type SoraUsage } from '@/lib/api';
@@ -16,6 +16,8 @@ import { SORA_FLOW_DRAFT_KEY, errorMessage, soraApi, type SoraConversation, type
 const IDEAS = [
   'Cadastre meus serviços: corte R$ 50 (40 min), barba R$ 35 (30 min) e combo corte + barba R$ 75 (1h)',
   'Crie um bot para mim',
+  'Quanto eu vendi este mês?',
+  'Cadastre a cliente Ana Souza, telefone (11) 98888-7777',
   'Como funcionam os lembretes de agendamento?',
 ];
 
@@ -28,7 +30,7 @@ const when = (iso: string) => {
 export default function SoraPage() {
   const toast = useToast();
   const router = useRouter();
-  const ai = useAiPlan();
+  const ai = useSoraPlan();
   const [usage, setUsage] = useState<SoraUsage | null>(null);
   const [conversations, setConversations] = useState<SoraConversation[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
@@ -123,7 +125,7 @@ export default function SoraPage() {
         title="Sora"
         text="Converse para tirar dúvidas, cadastrar serviços e produtos e montar o fluxo do bot. Nada muda no sistema sem você confirmar."
       />
-      {!ai && <div style={{ marginBottom: 14 }}><AiPlanNotice feature="Sora, a assistente de IA" /></div>}
+      {!ai && <div style={{ marginBottom: 14 }}><AiPlanNotice paid feature="Sora, a assistente de IA," /></div>}
 
       <div className="sora-page">
         <aside className="card sora-list">
@@ -148,16 +150,16 @@ export default function SoraPage() {
             <span className="sora-mark"><Sparkles size={17} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <strong>{conversations.find((c) => c.id === current)?.title ?? 'Nova conversa'}</strong>
-              <small style={{ display: 'block' }} className="muted">Catálogo: você confirma antes de cadastrar. Fluxo: abre no editor para revisar e salvar.</small>
+              <small style={{ display: 'block' }} className="muted">Catálogo e clientes: você confirma antes de mudar (e exclusões pedem confirmação extra). Fluxo: abre no editor para revisar e salvar.</small>
             </div>
-            {usage?.enabled && <small className="muted">{usage.used}/{usage.limit} no mês</small>}
+            {usage?.enabled && <small className="muted">{soraPercent(usage.used, usage.limit)}% do limite do mês</small>}
           </div>
 
           <div className="sora-thread" ref={chatRef}>
             {loadingChat && <div className="flow-system"><span className="spinner" /> Carregando conversa…</div>}
             {!loadingChat && !messages.length && !pending && (
               <div className="sora-empty">
-                <p className="muted">Oi! Eu sou a Sora. Posso cadastrar seu catálogo, montar o bot do WhatsApp e tirar dúvidas sobre a Sysora. Experimente:</p>
+                <p className="muted">Oi! Eu sou a Sora. Posso cadastrar e editar serviços, produtos e clientes, montar o bot do WhatsApp, contar como estão suas vendas e tirar dúvidas sobre a Sysora. Experimente:</p>
                 <div className="sora-ideas">
                   {IDEAS.map((idea) => <button key={idea} type="button" className="chip" disabled={busy || blocked} onClick={() => void ask(idea)}>{idea}</button>)}
                 </div>
@@ -166,10 +168,11 @@ export default function SoraPage() {
             {messages.map((m) => (
               <div key={m.id} className={`bubble${m.role === 'user' ? ' own' : ''}`}>
                 {m.text}
-                {m.role === 'assistant' && m.payload?.catalog?.length ? (
+                {m.role === 'assistant' && (m.payload?.catalog?.length || m.payload?.clients?.length) ? (
                   <SoraCatalogCard
                     messageId={m.id}
-                    changes={m.payload.catalog}
+                    changes={m.payload.catalog ?? []}
+                    clients={m.payload.clients ?? []}
                     appliedAt={m.payload.catalogAppliedAt}
                     onApplied={(appliedAt) => setMessages((list) => list.map((x) => (x.id === m.id ? { ...x, payload: { ...x.payload, catalogAppliedAt: appliedAt } } : x)))}
                   />
@@ -194,7 +197,7 @@ export default function SoraPage() {
               maxLength={2000}
               value={text}
               disabled={busy || blocked}
-              placeholder={limitReached ? 'Limite de pedidos do mês atingido.' : !usage?.enabled && usage ? 'A Sora ainda não está configurada neste servidor.' : 'Ex.: cadastre o produto Pomada modeladora por R$ 39,90'}
+              placeholder={limitReached ? 'Limite da Sora deste mês atingido. Renova no dia 1º.' : !usage?.enabled && usage ? 'A Sora ainda não está configurada neste servidor.' : 'Ex.: cadastre o produto Pomada modeladora por R$ 39,90'}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(text); } }}
             />

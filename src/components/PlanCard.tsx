@@ -26,8 +26,8 @@ export default function PlanCard({ plan, action, current }: { plan: PlanInfo; ac
       <ul>
         {plan.features.map((f) => <li key={f}><Check size={16} />{f}</li>)}
       </ul>
-      {/* lib/plans.ts (backend) -> hasAi: a IA só libera com o plano pago. */}
-      {featured && <small className="muted">Os recursos de IA são liberados a partir do primeiro pagamento. O teste grátis de {TRIAL_LABEL} é o do plano Inicial.</small>}
+      {/* lib/plans.ts (backend) -> hasSora/hasAi: a IA só libera com o plano pago. */}
+      <small className="muted">Os recursos de IA são liberados a partir do primeiro pagamento. O teste grátis de {TRIAL_LABEL} é sem IA.</small>
       {action}
     </article>
   );

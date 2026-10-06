@@ -7,6 +7,7 @@ import {
 import { LegalLinks } from '@/components/LegalLayout';
 import Logo from '@/components/Logo';
 import PlanCard from '@/components/PlanCard';
+import { money } from '@/lib/format';
 import { PLANS, TRIAL_LABEL } from '@/lib/plans';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -36,6 +37,32 @@ const roles = [
     items: ['Consulta e organiza a agenda', 'Cadastra e atualiza clientes', 'Responde as conversas do WhatsApp', 'Marca atendimentos como concluídos'],
   },
 ];
+
+// Diferenças entre os planos (tabela da seção Planos). true/false = tem ou não.
+const [INICIAL, AVANCADO] = PLANS;
+const perMonthYearly = (cents: number) => `${money(Math.round(cents / 12))}/mês`;
+const comparison: { label: string; inicial: string | boolean; avancado: string | boolean }[] = [
+  { label: 'Preço mensal', inicial: money(INICIAL.priceCents), avancado: money(AVANCADO.priceCents) },
+  { label: 'No plano anual (pagamento único)', inicial: perMonthYearly(INICIAL.yearlyPriceCents), avancado: perMonthYearly(AVANCADO.yearlyPriceCents) },
+  { label: 'Empresas', inicial: '1', avancado: `Até ${AVANCADO.maxCompanies}` },
+  { label: 'Números de WhatsApp', inicial: '1', avancado: '1 por empresa' },
+  { label: 'Equipe por empresa', inicial: `Administrador + ${INICIAL.maxEmployees}`, avancado: `Administrador + ${AVANCADO.maxEmployees}` },
+  { label: 'Chatbot que cadastra e agenda', inicial: true, avancado: true },
+  { label: 'Agenda, clientes e serviços ilimitados', inicial: true, avancado: true },
+  { label: 'Lembretes e confirmação de presença', inicial: true, avancado: true },
+  { label: 'Sora: IA que monta o fluxo do bot', inicial: 'Uso básico no mês', avancado: 'Mais que o dobro de uso' },
+  { label: 'Bot entende mensagens escritas do jeito do cliente', inicial: false, avancado: true },
+  { label: 'Bot entende áudios', inicial: false, avancado: true },
+  { label: 'Descrições de serviços com IA', inicial: false, avancado: true },
+  { label: 'Troca rápida entre as empresas', inicial: false, avancado: true },
+  { label: 'Suporte prioritário', inicial: false, avancado: true },
+];
+
+function CompareCell({ value }: { value: string | boolean }) {
+  if (value === true) return <Check size={18} aria-label="Incluído" />;
+  if (value === false) return <span className="muted" aria-label="Não incluído">—</span>;
+  return <>{value}</>;
+}
 
 export default function Landing() {
   return (
@@ -144,6 +171,27 @@ export default function Landing() {
                 action={<Link href={plan.id === 'AVANCADO' ? '/cadastro?plano=avancado' : '/cadastro?plano=inicial'} className="btn btn-primary btn-lg btn-block">Começar teste grátis</Link>}
               />
             ))}
+          </div>
+
+          <div className="plan-compare">
+            <h3>Compare os planos</h3>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr><th>Recurso</th><th>{INICIAL.name}</th><th>{AVANCADO.name}</th></tr>
+                </thead>
+                <tbody>
+                  {comparison.map((row) => (
+                    <tr key={row.label}>
+                      <td>{row.label}</td>
+                      <td><CompareCell value={row.inicial} /></td>
+                      <td><CompareCell value={row.avancado} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <small className="muted">Os recursos de IA são liberados a partir do primeiro pagamento; o teste grátis de {TRIAL_LABEL} é sem IA.</small>
           </div>
         </section>
 

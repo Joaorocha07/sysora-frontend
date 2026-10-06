@@ -41,7 +41,7 @@ export default function PainelPage() {
     { label: 'Agendamentos hoje', value: data.todayCount, hint: longDate(today()), icon: CalendarDays },
     { label: 'Agendamentos no mês', value: data.monthAppointments, hint: `${data.botAppointmentsMonth} feitos pelo bot`, icon: Bot },
     { label: 'Clientes', value: data.clients, hint: `+${data.newClientsMonth} neste mês`, icon: Users },
-    { label: 'Faturado no mês', value: money(data.monthRevenueCents), hint: `${data.monthCompleted} atendimentos concluídos`, icon: TrendingUp },
+    { label: 'Faturado no mês', value: money(data.monthRevenueCents), hint: `Serviços + produtos · ${data.monthSales ?? data.monthCompleted} ${(data.monthSales ?? data.monthCompleted) === 1 ? 'venda' : 'vendas'}`, icon: TrendingUp },
   ];
 
   return (

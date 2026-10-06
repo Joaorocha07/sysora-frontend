@@ -215,7 +215,7 @@ async function parseError(res: Response): Promise<ApiError> {
 }
 
 // Várias requisições com token vencido ao mesmo tempo compartilham um único refresh.
-let refreshPromise: Promise<Session | null> | null = null;
+let refreshPromise: Promise<Session> | null = null;
 let onSessionChange: ((session: Session | null) => void) | null = null;
 // Assinatura vencida (HTTP 402): o app recarrega a sessão para mostrar o aviso.
 let onSubscriptionBlocked: (() => void) | null = null;
@@ -270,15 +270,23 @@ function setMaintenance(on: boolean) {
 }
 const isMaintenanceError = (err: unknown) => err instanceof ApiError && err.code === MAINTENANCE_CODE;
 
+// Toda renovação passa por aqui: o refresh token é trocado a cada uso, então duas
+// renovações juntas (voltar para a aba + telas recebendo 401) mandariam o mesmo
+// token duas vezes e a segunda derrubaria a sessão.
+function sharedRefresh(): Promise<Session> {
+  const current = refreshPromise ?? send<Session>('POST', '/auth/refresh').then(keep).finally(() => { refreshPromise = null; });
+  refreshPromise = current;
+  return current;
+}
+
 function silentRefresh(): Promise<Session | null> {
-  refreshPromise ??= authApi.refresh()
+  return sharedRefresh()
     .then((session) => { onSessionChange?.(session); return session; })
     .catch((err) => {
-      if (isMaintenanceError(err)) return null;
+      // Sem conexão ou servidor acordando (Render): mantém a sessão; só sai quando o backend recusa.
+      if (!(err instanceof ApiError) || isMaintenanceError(err)) return null;
       setAccessToken(null); onSessionChange?.(null); return null;
-    })
-    .finally(() => { refreshPromise = null; });
-  return refreshPromise;
+    });
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -363,7 +371,7 @@ export const authApi = {
     return 'accessToken' in result ? keep(result) : result;
   },
   loginCompany: async (preAuthToken: string, companyId: string) => keep(await send<Session>('POST', '/auth/login/company', { preAuthToken, companyId })),
-  refresh: async () => keep(await send<Session>('POST', '/auth/refresh')),
+  refresh: () => sharedRefresh(),
   switchCompany: async (companyId: string | null) => keep(await send<Session>('POST', '/auth/switch-company', { companyId })),
   companies: () => get<{ companies: CompanyChoice[] }>('/auth/companies').then((r) => r.companies),
   memberships: () => get<{ memberships: MyMembership[] }>('/auth/memberships').then((r) => r.memberships),

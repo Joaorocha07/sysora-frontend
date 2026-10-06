@@ -35,6 +35,7 @@ export function PaymentCheckoutModal({ plan, payerEmail, onClose, onSuccess }: P
         cardTokenId: formData.token,
         payerEmail: formData.payer?.email || payerEmail,
         plan: plan.id,
+        cycle: 'MONTHLY',
       });
       setSuccess(true);
       setPending(inReview);

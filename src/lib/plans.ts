@@ -1,5 +1,10 @@
 import type { PlanInfo } from './api';
 
+// Plano anual: pagamento único de 12 meses com desconto sobre 12 mensalidades
+// (igual a YEARLY_DISCOUNT_PERCENT no backend).
+export const YEARLY_DISCOUNT_PERCENT = 20;
+const yearly = (priceCents: number) => Math.round((priceCents * 12 * (100 - YEARLY_DISCOUNT_PERCENT)) / 100);
+
 // Mesmo catálogo de sysora-backend/src/lib/plans.ts (landing, cadastro e modo demonstração).
 // Ao mudar preços ou limites, atualize os dois arquivos.
 export const PLANS: PlanInfo[] = [
@@ -7,6 +12,7 @@ export const PLANS: PlanInfo[] = [
     id: 'INICIAL',
     name: 'Inicial',
     priceCents: 9700,
+    yearlyPriceCents: yearly(9700),
     maxCompanies: 1,
     maxEmployees: 2,
     features: [
@@ -21,6 +27,7 @@ export const PLANS: PlanInfo[] = [
     id: 'AVANCADO',
     name: 'Avançado',
     priceCents: 19700,
+    yearlyPriceCents: yearly(19700),
     maxCompanies: 2,
     maxEmployees: 5,
     features: [

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowRight, Building2, CreditCard, Plus, Sparkles, XCircle } from 'lucide-react';
+import { ArrowRight, Building2, CalendarCheck, CreditCard, Plus, Sparkles, XCircle } from 'lucide-react';
 import PlanCard from '@/components/PlanCard';
 import { ConfirmDialog, Field, FormError, Loading, Modal, PageHead, useToast } from '@/components/ui';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { brDate, money } from '@/lib/format';
+import { YEARLY_DISCOUNT_PERCENT } from '@/lib/plans';
 
 function statusText(s: Subscription): string {
   const date = (value: string | null) => (value ? brDate(value.slice(0, 10)) : '');
@@ -121,6 +122,10 @@ export default function AssinaturaPage() {
 
   const hasActivePayment = sub.status === 'ACTIVE' && mpStatus?.mpStatus === 'authorized';
   const needsPayment = !sub.active || sub.status === 'TRIAL' || sub.status === 'PAST_DUE' || sub.status === 'CANCELED';
+  const yearly = sub.billingCycle === 'YEARLY';
+  // Anual não renova sozinho: libera o "Renovar" no último mês.
+  const yearlyEnding = yearly && sub.status === 'ACTIVE' && !!sub.paidUntil && new Date(sub.paidUntil).getTime() - Date.now() < 30 * 24 * 60 * 60 * 1000;
+  const offerYearly = !yearly && !sub.complimentary;
 
   if (!isAdmin) {
     return (
@@ -141,7 +146,9 @@ export default function AssinaturaPage() {
       <div className="card card-pad row-wrap" style={{ gap: 20, marginBottom: 20 }}>
         <span className="metric-icon" style={{ width: 48, height: 48, borderRadius: 16 }}><CreditCard size={20} /></span>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <strong style={{ display: 'block', fontSize: 18, fontFamily: 'var(--display)' }}>{money(sub.priceCents)}/mês</strong>
+          <strong style={{ display: 'block', fontSize: 18, fontFamily: 'var(--display)' }}>
+            {yearly && sub.yearlyPriceCents ? `${money(sub.yearlyPriceCents)}/ano · plano anual` : `${money(sub.priceCents)}/mês`}
+          </strong>
           <small>{statusText(sub)} · {sub.maxCompanies === 1 ? '1 empresa' : `até ${sub.maxCompanies} empresas`} · administrador + até {sub.maxEmployees} funcionários por empresa</small>
           {mpStatus?.lastFourDigits && (
             <small style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>
@@ -160,6 +167,16 @@ export default function AssinaturaPage() {
             >
               <CreditCard size={16} />
               {sub.status === 'TRIAL' ? 'Assinar agora' : 'Regularizar pagamento'}
+            </button>
+          )}
+          {(offerYearly || yearlyEnding) && (
+            <button
+              type="button"
+              className={needsPayment ? 'btn btn-outline' : 'btn btn-primary'}
+              onClick={() => router.push(`/assinatura/checkout?plan=${sub.plan}&ciclo=anual`)}
+            >
+              <CalendarCheck size={16} />
+              {yearlyEnding ? 'Renovar por mais 12 meses' : `Pagar anual (-${YEARLY_DISCOUNT_PERCENT}%)`}
             </button>
           )}
           {hasActivePayment && (

@@ -8,15 +8,17 @@ import {
   ExpirationDate,
   SecurityCode,
   createCardToken,
+  getInstallments,
   initMercadoPago,
 } from '@mercadopago/sdk-react';
 import { ArrowLeft, Banknote, CalendarDays, Check, CheckCircle, Copy, CreditCard, Lock, QrCode, User } from 'lucide-react';
 import Logo from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
-import { accountApi, errorMessage, subscriptionsApi, type PlanId, type PlanInfo } from '@/lib/api';
+import { accountApi, errorMessage, subscriptionsApi, type BillingCycle, type PlanId, type PlanInfo } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { isValidCpf, maskCpf } from '@/lib/document';
 import { money } from '@/lib/format';
+import { YEARLY_DISCOUNT_PERCENT } from '@/lib/plans';
 import { FormError, Loading } from '@/components/ui';
 
 if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_MP_PUBLIC_KEY) {
@@ -38,13 +40,15 @@ const mpStyle: any = {
   placeholder: { color: '#a3a3a3' },
 };
 
-// Juros compostos (Tabela Price) com 2,49% a.m. — taxa padrão MP Brasil.
-function installmentAmount(priceCents: number, n: number): number {
-  if (n === 1) return priceCents;
-  const r = 0.0249;
-  const coef = (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-  return Math.ceil(priceCents * coef);
-}
+// Parcelas do cartão no plano anual, como o Mercado Pago calcula para a bandeira/banco do cartão.
+type CardInstallments = {
+  paymentMethodId: string;
+  issuerId?: string;
+  options: { installments: number; label: string }[];
+};
+
+const cyclePrice = (plan: PlanInfo, cycle: BillingCycle) => (cycle === 'YEARLY' ? plan.yearlyPriceCents : plan.priceCents);
+const cycleSuffix = (cycle: BillingCycle) => (cycle === 'YEARLY' ? '/ano' : '/mês');
 
 function CheckoutContent() {
   const router = useRouter();
@@ -53,6 +57,9 @@ function CheckoutContent() {
 
   const [plans, setPlans] = useState<PlanInfo[]>([]);
   const [planId, setPlanId] = useState<PlanId>((params.get('plan') ?? 'INICIAL') as PlanId);
+  const [cycle, setCycle] = useState<BillingCycle>(params.get('ciclo') === 'anual' ? 'YEARLY' : 'MONTHLY');
+  const [bin, setBin] = useState<string | null>(null);
+  const [cardInstallments, setCardInstallments] = useState<CardInstallments | null>(null);
   const [tab, setTab] = useState<Tab>('card');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,6 +75,7 @@ function CheckoutContent() {
   const [pixCopied, setPixCopied] = useState(false);
 
   const plan = plans.find((p) => p.id === planId) ?? null;
+  const price = plan ? cyclePrice(plan, cycle) : 0;
 
   // Proteção de rota
   useEffect(() => {
@@ -80,12 +88,35 @@ function CheckoutContent() {
       .catch(() => router.push('/assinatura'));
   }, [router]);
 
-  function selectPlan(id: PlanId) {
+  function selectPlan(id: PlanId, nextCycle = cycle) {
     setPlanId(id);
+    setCycle(nextCycle);
     setPixData(null);
     setError(null);
-    router.replace(`/assinatura/checkout?plan=${id}`, { scroll: false });
+    router.replace(`/assinatura/checkout?plan=${id}${nextCycle === 'YEARLY' ? '&ciclo=anual' : ''}`, { scroll: false });
   }
+
+  // Anual: com os primeiros dígitos do cartão, busca no Mercado Pago a bandeira e as parcelas.
+  useEffect(() => {
+    setCardInstallments(null);
+    setInstallments(1);
+    if (cycle !== 'YEARLY' || !bin || !price) return;
+    let alive = true;
+    getInstallments({ amount: String(price / 100), bin, locale: 'pt-BR' })
+      .then((result) => {
+        const first = result?.[0];
+        if (!alive || !first) return;
+        setCardInstallments({
+          paymentMethodId: first.payment_method_id,
+          issuerId: first.issuer?.id ? String(first.issuer.id) : undefined,
+          options: first.payer_costs
+            .filter((c) => c.installments <= 12)
+            .map((c) => ({ installments: c.installments, label: c.recommended_message })),
+        });
+      })
+      .catch(() => { /* sem parcelas: o envio avisa que não reconheceu o cartão */ });
+    return () => { alive = false; };
+  }, [cycle, bin, price]);
 
   useEffect(() => {
     if (!pixData) return;
@@ -115,8 +146,13 @@ function CheckoutContent() {
         identificationNumber: cpf.replace(/\D/g, ''),
       });
       if (!token?.id) throw new Error('Não foi possível tokenizar o cartão. Verifique os dados e tente novamente.');
-      const paymentMethodId = (token as Record<string, unknown>).payment_method_id as string | undefined;
-      const result = await subscriptionsApi.checkout({ cardTokenId: token.id, payerEmail: user.email, plan: plan.id, installments, paymentMethodId });
+      if (cycle === 'YEARLY' && !cardInstallments) throw new Error('Não foi possível identificar a bandeira do cartão. Confira o número.');
+      const result = await subscriptionsApi.checkout({
+        cardTokenId: token.id, payerEmail: user.email, plan: plan.id, cycle,
+        ...(cycle === 'YEARLY' && cardInstallments
+          ? { installments, paymentMethodId: cardInstallments.paymentMethodId, issuerId: cardInstallments.issuerId }
+          : {}),
+      });
       setPending(result.pending);
       setSuccess(true);
       await reloadSession();
@@ -133,7 +169,7 @@ function CheckoutContent() {
     setBusy(true);
     setError(null);
     try {
-      const pix = await subscriptionsApi.generatePix({ plan: plan.id, payerEmail: user.email });
+      const pix = await subscriptionsApi.generatePix({ plan: plan.id, cycle, payerEmail: user.email });
       setPixData(pix);
     } catch (err) {
       setError(errorMessage(err));
@@ -171,7 +207,7 @@ function CheckoutContent() {
               <p className="muted">
                 {pending
                   ? `Seu plano ${plan.name} será ativado assim que o Mercado Pago confirmar a cobrança. Redirecionando para sua conta...`
-                  : `Plano ${plan.name} ativo. Redirecionando para sua conta...`}
+                  : `Plano ${plan.name}${cycle === 'YEARLY' ? ' anual' : ''} ativo. Redirecionando para sua conta...`}
               </p>
             </div>
           </div>
@@ -181,7 +217,7 @@ function CheckoutContent() {
   }
 
   return (
-    <div className="auth" style={{ gridTemplateColumns: '1fr 1.1fr' }}>
+    <div className="auth checkout-page">
 
       {/* ── PAINEL ESQUERDO (escuro) ── */}
       <aside className="auth-side">
@@ -234,8 +270,8 @@ function CheckoutContent() {
                     até {p.maxEmployees} func.
                   </span>
                   <div style={{ marginTop: 4 }}>
-                    <strong style={{ fontFamily: 'var(--display)', fontSize: 20 }}>{money(p.priceCents)}</strong>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>/mês</span>
+                    <strong style={{ fontFamily: 'var(--display)', fontSize: 20 }}>{money(cyclePrice(p, cycle))}</strong>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>{cycleSuffix(cycle)}</span>
                   </div>
                 </button>
               );
@@ -271,6 +307,21 @@ function CheckoutContent() {
 
         <div style={{ width: 'min(520px, 100%)', display: 'grid', gap: 24 }}>
 
+          {/* Celular: o painel escuro some, então o voltar e a troca de plano ficam aqui. */}
+          <div className="checkout-mobile">
+            <Link href="/assinatura" className="checkout-back"><ArrowLeft size={14} />Voltar</Link>
+            {plans.length > 1 && (
+              <div className="checkout-plans">
+                {plans.map((p) => (
+                  <button key={p.id} type="button" className={p.id === planId ? 'active' : ''} onClick={() => selectPlan(p.id)}>
+                    <strong>{p.name}</strong>
+                    <span>{money(cyclePrice(p, cycle))}{cycleSuffix(cycle)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
               Complete seu pedido
@@ -278,9 +329,23 @@ function CheckoutContent() {
             <h2 style={{ fontSize: 22 }}>
               Plano {plan.name}{' '}
               <span style={{ fontWeight: 400, fontSize: 16, color: 'var(--muted)' }}>
-                · {money(plan.priceCents)}/mês
+                · {money(price)}{cycleSuffix(cycle)}
               </span>
             </h2>
+            {cycle === 'YEARLY' && (
+              <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+                Equivale a {money(Math.round(price / 12))}/mês · você economiza {money(plan.priceCents * 12 - price)} no ano
+              </p>
+            )}
+          </div>
+
+          <div className="checkout-cycle" role="radiogroup" aria-label="Forma de cobrança">
+            {(['MONTHLY', 'YEARLY'] as const).map((c) => (
+              <button key={c} type="button" role="radio" aria-checked={cycle === c} className={cycle === c ? 'active' : ''} onClick={() => selectPlan(planId, c)}>
+                {c === 'MONTHLY' ? 'Mensal' : 'Anual'}
+                {c === 'YEARLY' && <span className="checkout-cycle-off">-{YEARLY_DISCOUNT_PERCENT}%</span>}
+              </button>
+            ))}
           </div>
 
           <div>
@@ -315,7 +380,7 @@ function CheckoutContent() {
                     <div className="input-icon">
                       <CreditCard size={17} />
                       <div className="input checkout-secure-field">
-                        <CardNumber placeholder="1234 5678 9012 3456" style={mpStyle} />
+                        <CardNumber placeholder="1234 5678 9012 3456" style={mpStyle} onBinChange={(e) => setBin(e?.bin ?? null)} />
                       </div>
                     </div>
                   </label>
@@ -339,7 +404,8 @@ function CheckoutContent() {
                       </div>
                     </label>
                   </div>
-                  {plan && (
+                  {/* Parcelas só no anual: a assinatura mensal do Mercado Pago não parcela. */}
+                  {cycle === 'YEARLY' && (
                     <label className="field">
                       <span>Parcelas</span>
                       <div className="input-icon">
@@ -348,24 +414,16 @@ function CheckoutContent() {
                           className="select"
                           value={installments}
                           onChange={(e) => setInstallments(Number(e.target.value))}
+                          disabled={!cardInstallments}
                           style={{ paddingLeft: 44 }}
                         >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => {
-                            const per = installmentAmount(plan.priceCents, n);
-                            const total = per * n;
-                            return (
-                              <option key={n} value={n}>
-                                {n === 1
-                                  ? `1x de ${money(per)} sem juros`
-                                  : `${n}x de ${money(per)} (total ${money(total)}) com juros`}
-                              </option>
-                            );
-                          })}
+                          {cardInstallments
+                            ? cardInstallments.options.map((o) => <option key={o.installments} value={o.installments}>{o.label}</option>)
+                            : <option value={1}>{bin ? 'Buscando parcelas...' : 'Digite o número do cartão para ver as parcelas'}</option>}
                         </select>
                       </div>
                     </label>
                   )}
-
                   <label className="field">
                     <span>Nome no cartão</span>
                     <div className="input-icon">
@@ -401,7 +459,7 @@ function CheckoutContent() {
                     disabled={busy}
                   >
                     {busy && <span className="spinner" />}
-                    Assinar · {money(plan.priceCents)}/mês
+                    {cycle === 'YEARLY' ? `Pagar ${money(price)} · 12 meses` : `Assinar · ${money(price)}/mês`}
                   </button>
                 </form>
               )}
@@ -412,7 +470,9 @@ function CheckoutContent() {
                   {!pixData ? (
                     <>
                       <p className="muted" style={{ fontSize: 13 }}>
-                        Acesso liberado em minutos após a confirmação. A renovação é manual todo mês.
+                        {cycle === 'YEARLY'
+                          ? 'Acesso liberado em minutos após a confirmação, por 12 meses. Perto do vencimento é só pagar de novo.'
+                          : 'Acesso liberado em minutos após a confirmação. A renovação é manual todo mês.'}
                       </p>
                       <button
                         type="button"
@@ -422,7 +482,7 @@ function CheckoutContent() {
                         style={{ gap: 10 }}
                       >
                         {busy ? <span className="spinner" /> : <QrCode size={18} />}
-                        Gerar QR Code · {money(plan.priceCents)}
+                        Gerar QR Code · {money(price)}
                       </button>
                     </>
                   ) : (

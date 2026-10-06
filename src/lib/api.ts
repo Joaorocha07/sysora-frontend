@@ -21,15 +21,18 @@ export type MyMembership = {
 };
 export type PlanId = 'INICIAL' | 'AVANCADO';
 export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+// Mensal = assinatura no cartão ou Pix de 1 mês; anual = pagamento único de 12 meses com desconto.
+export type BillingCycle = 'MONTHLY' | 'YEARLY';
 export type Subscription = {
   accountId: string; plan: PlanId; planName: string; priceCents: number; status: SubscriptionStatus;
+  billingCycle?: BillingCycle; yearlyPriceCents?: number;
   trialEndsAt: string | null; paidUntil: string | null; active: boolean; maxCompanies: number; maxEmployees: number;
   // Recursos de IA liberados: plano Avançado pago (o teste grátis não tem IA).
   ai: boolean;
   // Cortesia (teste, parceiro): plano liberado sem cobrança, fora da receita do painel master.
   complimentary?: boolean;
 };
-export type PlanInfo = { id: PlanId; name: string; priceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
+export type PlanInfo = { id: PlanId; name: string; priceCents: number; yearlyPriceCents: number; maxCompanies: number; maxEmployees: number; features: string[] };
 export type Session = {
   accessToken: string; user: AuthUser; company: AuthCompany | null; role: Role | null; subscription: Subscription | null;
   // Aviso do backend (ex.: levado para outra empresa porque o plano da atual venceu).
@@ -469,12 +472,13 @@ export type PixData = {
 };
 
 export const subscriptionsApi = {
-  checkout: (body: { cardTokenId: string; payerEmail: string; plan: PlanId; installments?: number; paymentMethodId?: string }) =>
+  // installments, paymentMethodId e issuerId: só no anual (pagamento único parcelável).
+  checkout: (body: { cardTokenId: string; payerEmail: string; plan: PlanId; cycle: BillingCycle; installments?: number; paymentMethodId?: string; issuerId?: string }) =>
     send<{ subscription: Subscription; pending: boolean }>('POST', '/subscriptions/checkout', body),
   cancel: () =>
     send<{ subscription: Subscription }>('POST', '/subscriptions/cancel').then((r) => r.subscription),
   status: () => get<MpSubscriptionStatus>('/subscriptions/status'),
-  generatePix: (body: { plan: PlanId; payerEmail: string }) =>
+  generatePix: (body: { plan: PlanId; cycle: BillingCycle; payerEmail: string }) =>
     send<PixData>('POST', '/subscriptions/pix', body),
   pixStatus: (paymentId: string) =>
     get<{ paid: boolean }>(`/subscriptions/pix/${paymentId}/status`),

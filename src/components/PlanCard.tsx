@@ -2,7 +2,7 @@ import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { PlanInfo } from '@/lib/api';
 import { money } from '@/lib/format';
-import { TRIAL_LABEL } from '@/lib/plans';
+import { TRIAL_LABEL, YEARLY_DISCOUNT_PERCENT } from '@/lib/plans';
 
 // Cartão de plano: destaque (preto) no Avançado.
 export default function PlanCard({ plan, action, current }: { plan: PlanInfo; action?: ReactNode; current?: boolean }) {
@@ -20,6 +20,9 @@ export default function PlanCard({ plan, action, current }: { plan: PlanInfo; ac
         <strong>{money(plan.priceCents).replace(',00', '')}</strong>
         <small>/mês</small>
       </div>
+      <p className="muted price-yearly">
+        ou {money(Math.round(plan.yearlyPriceCents / 12))}/mês no plano anual ({YEARLY_DISCOUNT_PERCENT}% de desconto)
+      </p>
       <ul>
         {plan.features.map((f) => <li key={f}><Check size={16} />{f}</li>)}
       </ul>

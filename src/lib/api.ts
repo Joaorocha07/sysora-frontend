@@ -52,7 +52,18 @@ export type Client = {
   // Respondeu "PARAR": não recebe lembretes automáticos pelo WhatsApp.
   whatsappOptOutAt?: string | null;
   _count?: { appointments: number };
+  // Etiquetas (lista e ficha) e etapa do funil (nula = primeira etapa).
+  tags?: TagRef[];
+  stageId?: string | null;
+  // Na conversa: ids das etiquetas.
+  tagIds?: string[];
+  archivedAt?: string | null;
 };
+
+// Etiqueta de cliente. color: nome de uma das cores de lib/tags.ts.
+export type TagColor = 'graphite' | 'stone' | 'sand' | 'clay' | 'moss' | 'sage' | 'mist' | 'plum';
+export type TagRef = { id: string; name: string; color: TagColor };
+export type Tag = TagRef & { createdAt: string; _count?: { clients: number } };
 
 // SERVICE: tem duração e ocupa horário. PRODUCT: pronta entrega, sem duração (0).
 export type ServiceKind = 'SERVICE' | 'PRODUCT';
@@ -79,6 +90,7 @@ export type BotState = { paused: boolean; pausedUntil: string | null; waitingFor
 export type Conversation = {
   id: string; name: string; phone: string; whatsappId: string | null; lastMessageAt: string; unreadCount: number;
   lastMessage: { text: string; sender: MessageSender; createdAt: string } | null; withStaff: boolean;
+  tagIds?: string[]; stageId?: string | null; archivedAt?: string | null;
 };
 
 export type Settings = {
@@ -581,10 +593,41 @@ export const bookingApi = {
   receipt: (token: string) => get<BookingReceipt>(`/booking/receipt/${encodeURIComponent(token)}`),
 };
 
+// Link aberto da empresa (/reservar/[token]): a pessoa informa nome e WhatsApp.
+export type OpenBooking = Omit<PublicBooking, 'client' | 'expiresAt'> & { client: null };
+export type BookingDone = { appointment: PublicBookingResult; notified: boolean; receiptUrl: string; address: string | null };
+export const openBookingApi = {
+  get: (token: string) => get<OpenBooking>(`/booking/open/${encodeURIComponent(token)}`),
+  days: (token: string, serviceIds: string[]) =>
+    get<{ days: string[] }>(`/booking/open/${encodeURIComponent(token)}/days${qs({ services: serviceIds.join(',') })}`).then((r) => r.days),
+  times: (token: string, serviceIds: string[], date: string) =>
+    get<{ times: string[] }>(`/booking/open/${encodeURIComponent(token)}/times${qs({ services: serviceIds.join(','), date })}`).then((r) => r.times),
+  book: (token: string, input: { serviceIds: string[]; date: string; time: string; name: string; phone: string }) =>
+    send<BookingDone>('POST', `/booking/open/${encodeURIComponent(token)}`, input),
+};
+
+// Links que o dono gera para mandar ao cliente.
+export const bookingLinksApi = {
+  forClient: (clientId: string) =>
+    send<{ url: string; expiresAt: string; client: { id: string; name: string; phone: string; whatsappId: string | null } }>('POST', '/booking-links/client', { clientId }),
+  open: () => get<{ enabled: boolean; url: string | null }>('/booking-links/open'),
+  setOpen: (enabled: boolean) => send<{ enabled: boolean; url: string | null }>('PUT', '/booking-links/open', { enabled }),
+  regenerateOpen: () => send<{ enabled: boolean; url: string | null }>('POST', '/booking-links/open/regenerate'),
+};
+
 export type ClientInput = { name: string; phone: string; email?: string | null; birthday?: string | null; notes?: string | null; reminders?: boolean };
 export const clientsApi = {
-  list: (search?: string) => get<{ clients: Client[] }>(`/clients${qs({ search })}`).then((r) => r.clients),
+  list: (search?: string, filters: { tagId?: string; stageId?: string } = {}) =>
+    get<{ clients: Client[]; total?: number }>(`/clients${qs({ search, ...filters })}`).then((r) => r.clients),
+  listWithTotal: (search?: string, filters: { tagId?: string; stageId?: string } = {}) =>
+    get<{ clients: Client[]; total?: number }>(`/clients${qs({ search, ...filters })}`),
   get: (id: string) => get<{ client: ClientDetail }>(`/clients/${id}`).then((r) => r.client),
+  setTags: (id: string, tagIds: string[]) => send<{ tags: TagRef[] }>('PUT', `/clients/${id}/tags`, { tagIds }).then((r) => r.tags),
+  notes: (id: string) => get<{ notes: ClientNote[] }>(`/clients/${id}/notes`).then((r) => r.notes),
+  addNote: (id: string, text: string) => send<{ note: ClientNote }>('POST', `/clients/${id}/notes`, { text }).then((r) => r.note),
+  removeNote: (id: string, noteId: string) => send('DELETE', `/clients/${id}/notes/${noteId}`),
+  exportAll: () => get<{ clients: ClientExportRow[] }>('/clients/export').then((r) => r.clients),
+  importMany: (clients: ClientImportRow[], tagId?: string | null) => send<ClientImportResult>('POST', '/clients/import', { clients, tagId }),
   create: (input: ClientInput) => send<{ client: Client }>('POST', '/clients', input).then((r) => r.client),
   update: (id: string, input: Partial<ClientInput>) => send<{ client: Client }>('PATCH', `/clients/${id}`, input).then((r) => r.client),
   remove: (id: string) => send('DELETE', `/clients/${id}`),
@@ -626,9 +669,124 @@ export const conversationsApi = {
   get: (clientId: string) => get<{ client: Client; messages: Message[]; bot: BotState; channel: ConversationChannel }>(`/conversations/${clientId}`),
   reply: (clientId: string, text: string) => send<{ bot: BotState }>('POST', `/conversations/${clientId}/reply`, { text }),
   resumeBot: (clientId: string) => send<{ bot: BotState }>('POST', `/conversations/${clientId}/resume-bot`),
+  archive: (clientId: string, archived: boolean) => send<{ archivedAt: string | null }>('POST', `/conversations/${clientId}/archive`, { archived }),
 };
 
-export const dashboardApi = { get: () => get<Dashboard>('/dashboard') };
+// Insights do atendimento (aba Atendimento do painel). heat[diaDaSemana][hora] = mensagens recebidas.
+export type InsightContact = { id: string; name: string; phone: string; firstAt: string };
+export type ResponseTime = { median: number; avg: number; count: number } | null;
+export type Insights = {
+  days: number;
+  totals: { inbound: number; bot: number; staff: number; leads: number; newLeads: number };
+  daily: { date: string; inbound: number; outbound: number }[];
+  heat: number[][];
+  hours: { openingTime: string; closingTime: string; workDays: number[] };
+  response: { bot: ResponseTime; staff: ResponseTime };
+  engagement: { bucket: string; count: number }[];
+  todayLeads: InsightContact[]; todayCount: number;
+  ghosts: InsightContact[]; ghostCount: number;
+  retention: { active: number; cold: number; inactive: number; lost: number };
+  funnel: { id: string; name: string; won: boolean; count: number }[];
+};
+
+export const dashboardApi = {
+  get: () => get<Dashboard>('/dashboard'),
+  insights: (days: number) => get<Insights>(`/dashboard/insights${qs({ days: String(days) })}`),
+};
+
+export const tagsApi = {
+  list: () => get<{ tags: Tag[] }>('/tags').then((r) => r.tags),
+  create: (input: { name: string; color: TagColor }) => send<{ tag: Tag }>('POST', '/tags', input).then((r) => r.tag),
+  update: (id: string, input: Partial<{ name: string; color: TagColor }>) => send<{ tag: Tag }>('PATCH', `/tags/${id}`, input).then((r) => r.tag),
+  remove: (id: string) => send('DELETE', `/tags/${id}`),
+};
+
+// Resposta rápida: "/atalho" no chat. {nome} vira o primeiro nome do cliente.
+export type QuickReply = { id: string; title: string; shortcut: string | null; text: string; createdAt: string; updatedAt: string };
+export type QuickReplyInput = { title: string; shortcut?: string | null; text: string };
+export const quickRepliesApi = {
+  list: () => get<{ replies: QuickReply[] }>('/quick-replies').then((r) => r.replies),
+  create: (input: QuickReplyInput) => send<{ reply: QuickReply }>('POST', '/quick-replies', input).then((r) => r.reply),
+  update: (id: string, input: Partial<QuickReplyInput>) => send<{ reply: QuickReply }>('PATCH', `/quick-replies/${id}`, input).then((r) => r.reply),
+  remove: (id: string) => send('DELETE', `/quick-replies/${id}`),
+  // Texto sugerido pela IA (plano Avançado; não salva nada).
+  write: (input: { request: string; draft?: string | null }) => send<{ title: string; text: string }>('POST', '/quick-replies/ai', input),
+};
+
+// Funil de vendas. won = etapa de venda fechada.
+export type PipelineStage = { id: string; name: string; position: number; won: boolean };
+export type PipelineCard = {
+  id: string; name: string; phone: string; stageId: string; lastMessageAt: string | null; unreadCount: number; createdAt: string; tagIds: string[];
+};
+export const pipelineApi = {
+  get: () => get<{ stages: PipelineStage[]; clients: PipelineCard[]; total: number; limit: number }>('/pipeline'),
+  stages: () => get<{ stages: PipelineStage[] }>('/pipeline/stages').then((r) => r.stages),
+  saveStages: (stages: { id?: string; name: string; won: boolean }[]) =>
+    send<{ stages: PipelineStage[] }>('PUT', '/pipeline/stages', { stages }).then((r) => r.stages),
+  move: (clientId: string, stageId: string) => send('POST', '/pipeline/move', { clientId, stageId }),
+};
+
+export type ClientNote = { id: string; clientId: string; authorId: string | null; authorName: string; text: string; createdAt: string };
+
+export type ScheduledStatus = 'PENDING' | 'SENT' | 'FAILED' | 'CANCELED';
+export type ScheduledMessage = {
+  id: string; clientId: string; text: string; sendAt: string; status: ScheduledStatus; sentAt: string | null; error: string | null;
+  createdByName: string; createdAt: string;
+  client: { id: string; name: string; phone: string; whatsappId: string | null };
+};
+export const scheduledMessagesApi = {
+  list: (params: { from?: string; to?: string; clientId?: string; status?: ScheduledStatus } = {}) =>
+    get<{ messages: ScheduledMessage[] }>(`/scheduled-messages${qs(params)}`).then((r) => r.messages),
+  create: (input: { clientId: string; text: string; sendAt: string }) =>
+    send<{ message: ScheduledMessage }>('POST', '/scheduled-messages', input).then((r) => r.message),
+  update: (id: string, input: { text?: string; sendAt?: string }) =>
+    send<{ message: ScheduledMessage }>('PATCH', `/scheduled-messages/${id}`, input).then((r) => r.message),
+  cancel: (id: string) => send<{ message: ScheduledMessage }>('POST', `/scheduled-messages/${id}/cancel`).then((r) => r.message),
+  // Texto sugerido pela IA (plano Avançado; não salva nada).
+  write: (input: { clientId: string; request: string; draft?: string | null; sendAt?: string | null }) =>
+    send<{ text: string }>('POST', '/scheduled-messages/ai', input).then((r) => r.text),
+  remove: (id: string) => send('DELETE', `/scheduled-messages/${id}`),
+};
+
+export type FollowUpStep = { delayMinutes: number; text: string };
+export type FollowUpConfig = { enabled: boolean; steps: (FollowUpStep & { id?: string })[]; maxSteps: number };
+export const followUpApi = {
+  get: () => get<FollowUpConfig>('/follow-up'),
+  save: (input: { enabled: boolean; steps: FollowUpStep[] }) => send<FollowUpConfig>('PUT', '/follow-up', input),
+  // Textos sugeridos pela IA, um por etapa (plano Avançado; não salva nada).
+  write: (input: { request?: string | null; steps: { delayMinutes: number; text?: string | null }[] }) =>
+    send<{ messages: string[] }>('POST', '/follow-up/ai', input).then((r) => r.messages),
+};
+
+// Reativação: o bot convida para agendar quem não manda mensagem há `days` dias.
+export type Reactivation = {
+  enabled: boolean; days: number; message: string; dailyLimit: number; official: boolean;
+  candidates: number; preview: { id: string; name: string; phone: string; lastInboundAt: string }[];
+  sentToday: number; sent30: number;
+};
+export const reactivationApi = {
+  get: () => get<Reactivation>('/reactivation'),
+  save: (input: { enabled: boolean; days: number; message: string }) => send<Reactivation>('PUT', '/reactivation', input),
+  write: (input: { request?: string | null; draft?: string | null; days: number }) =>
+    send<{ text: string }>('POST', '/reactivation/ai', input).then((r) => r.text),
+};
+
+export type PushScope = 'all' | 'handoff';
+export const pushApi = {
+  config: () => get<{ enabled: boolean; publicKey: string | null }>('/push/config'),
+  status: (endpoint: string) => send<{ subscribed: boolean; scope: PushScope | null }>('POST', '/push/status', { endpoint }),
+  subscribe: (subscription: PushSubscriptionJSON, scope: PushScope, test = false) =>
+    send<{ subscribed: boolean; scope: PushScope }>('POST', '/push/subscribe', { endpoint: subscription.endpoint, keys: subscription.keys, scope, test }),
+  unsubscribe: (endpoint: string) => send('POST', '/push/unsubscribe', { endpoint }),
+};
+
+// Linha da planilha de clientes (exportar e importar).
+export type ClientExportRow = {
+  name: string; phone: string; email: string | null; birthday: string | null; notes: string | null; source: Source;
+  createdAt: string; lastMessageAt: string | null; stage: string | null; tags: string[]; appointments: number;
+};
+export type ClientImportRow = { name: string; phone: string; email?: string; birthday?: string; notes?: string; tags?: string[] };
+export type ClientImportResult = { created: number; skipped: { line: number; name: string; reason: string }[]; skippedCount: number };
 
 // Pesquisa inicial (todo usuário de empresa). status: done = respondeu;
 // dismissed = escolheu responder depois; pending = ainda não viu o convite.

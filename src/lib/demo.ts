@@ -5,6 +5,7 @@ import type {
   AdminCompany, AdminUser, Appointment, AppointmentStatus, Client, Conversation, FlowNode, Member, Message, Service, Session, Settings, Subscription,
 } from './api';
 import { PLANS } from './plans';
+import { demoClientFilter, demoCrm, withCrm } from './demoCrm';
 
 export type DemoMode = 'empresa' | 'master';
 // Configuração "cadastro pelo site" do painel master na demonstração.
@@ -476,12 +477,17 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
     }
   }
 
+  // Etiquetas, funil, respostas rápidas, agendadas, follow-up e insights (demoCrm.ts).
+  const crm = demoCrm(d.clients, d.messages, method, path, query, body as Record<string, unknown>, fail);
+  if (crm !== demoCrm.NONE) return crm;
+
   // Painel da empresa
   if (path === '/dashboard') return dashboard();
 
   if (path === '/clients' && method === 'GET') {
     const search = (query.get('search') ?? '').toLowerCase();
-    return { clients: d.clients.filter((c) => `${c.name} ${c.phone} ${c.email ?? ''}`.toLowerCase().includes(search)).map(clientCount) };
+    const list = d.clients.filter((c) => `${c.name} ${c.phone} ${c.email ?? ''}`.toLowerCase().includes(search)).filter(demoClientFilter(d.clients, query));
+    return { clients: list.map((c) => withCrm(d.clients, clientCount(c))), total: list.length };
   }
   if (path === '/clients' && method === 'POST') {
     const client: Client = { id: id(), name: String(body.name), phone: String(body.phone), email: (body.email as string) || null, birthday: (body.birthday as string) || null, notes: (body.notes as string) || null, whatsappId: null, source: 'STAFF', lastMessageAt: null, unreadCount: 0, createdAt: new Date().toISOString() };
@@ -496,7 +502,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
       Object.assign(client, rest, reminders === undefined ? {} : { whatsappOptOutAt: reminders ? null : new Date().toISOString() });
       return { client };
     }
-    return { client: { ...client, appointments: d.appointments.filter((a) => a.clientId === client.id).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime)) } };
+    return { client: withCrm(d.clients, { ...client, appointments: d.appointments.filter((a) => a.clientId === client.id).sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime)) }) };
   }
 
   if (path === '/services/improve-description') {
@@ -553,7 +559,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
   if (path === '/conversations') {
     const list: Conversation[] = d.clients.filter((c) => c.lastMessageAt).sort((a, b) => b.lastMessageAt!.localeCompare(a.lastMessageAt!)).map((c) => {
       const last = (d.messages[c.id] ?? []).at(-1);
-      return { id: c.id, name: c.name, phone: c.phone, whatsappId: c.whatsappId, lastMessageAt: c.lastMessageAt!, unreadCount: c.unreadCount, lastMessage: last ? { text: last.text, sender: last.sender, createdAt: last.createdAt } : null, withStaff: c.id === 'c2' };
+      return withCrm(d.clients, { id: c.id, name: c.name, phone: c.phone, whatsappId: c.whatsappId, lastMessageAt: c.lastMessageAt!, unreadCount: c.unreadCount, lastMessage: last ? { text: last.text, sender: last.sender, createdAt: last.createdAt } : null, withStaff: c.id === 'c2' });
     });
     return { conversations: list };
   }
@@ -568,7 +574,7 @@ function route(method: string, path: string, query: URLSearchParams, body: Body)
     const client = d.clients.find((c) => c.id === r![1]) ?? fail('Cliente não encontrado.', 404);
     client.unreadCount = 0;
     const paused = client.id === 'c2';
-    return { client, messages: d.messages[client.id] ?? [], bot: { paused, pausedUntil: paused ? new Date(Date.now() + 20 * 60000).toISOString() : null, waitingForStaff: false } };
+    return { client: withCrm(d.clients, client), messages: d.messages[client.id] ?? [], bot: { paused, pausedUntil: paused ? new Date(Date.now() + 20 * 60000).toISOString() : null, waitingForStaff: false } };
   }
 
   if (path === '/users' && method === 'GET') return { users: d.members };

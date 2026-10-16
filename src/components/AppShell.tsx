@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   AlertTriangle, ArrowUpRight, Building2, CalendarDays, ChevronDown, ClipboardList, CreditCard, Eye, LayoutDashboard, LogOut, Menu, MessageCircle, QrCode,
-  Repeat, Settings, ShieldCheck, Sparkles, Tags, Users, UserCog, X,
+  Repeat, Settings, ShieldCheck, Sparkles, SquareKanban, Tags, Users, UserCog, X, Zap,
 } from 'lucide-react';
 import Logo from './Logo';
 import LogoutDialog from './LogoutDialog';
@@ -17,6 +17,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { demoMode } from '@/lib/demo';
+import { registerServiceWorker } from '@/lib/pwa';
 import { ROLE_LABELS, firstName } from '@/lib/format';
 
 // Dias até o fim do teste grátis (arredondado para cima).
@@ -65,6 +66,8 @@ const MAIN_NAV: NavItem[] = [
   { href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/conversas', label: 'Conversas', icon: MessageCircle },
+  { href: '/funil', label: 'Funil de vendas', icon: SquareKanban },
+  { href: '/atendimento', label: 'Atendimento', icon: Zap },
   { href: '/servicos', label: 'Catálogo', icon: Tags },
 ];
 // Só nas empresas liberadas pelo admin master (settings.clientSubscriptionsEnabled):
@@ -108,6 +111,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const forbidden = Boolean(current?.adminOnly && !isAdmin);
 
   useEffect(() => { setDemo(Boolean(demoMode())); }, [status]);
+  // App instalável e notificações (public/sw.js).
+  useEffect(() => { registerServiceWorker(); }, []);
 
   // Proteção das rotas: sem sessão -> login; admin master fora de empresa -> painel master.
   useEffect(() => {

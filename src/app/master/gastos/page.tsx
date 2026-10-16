@@ -22,6 +22,10 @@ const FEATURE_LABEL: Record<string, string> = {
   sora: 'Sora (fluxo e chat)',
   bot: 'IA do atendimento',
   servico: 'Melhorar com IA (catálogo)',
+  resposta: 'Respostas rápidas com IA',
+  agendada: 'Mensagens agendadas com IA',
+  followup: 'Follow-up com IA',
+  reativacao: 'Reativação com IA',
   audio: 'Transcrição de áudios',
 };
 

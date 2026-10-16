@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bot, CalendarCheck, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Bot, CalendarCheck, ChevronLeft, ChevronRight, Link2, Plus } from 'lucide-react';
 import AppointmentDetails from '@/components/AppointmentDetails';
+import BookingLinkModal from '@/components/BookingLinkModal';
 import AppointmentModal from '@/components/AppointmentModal';
 import { Empty, PageHead, useToast } from '@/components/ui';
 import { appointmentsApi, errorMessage, settingsApi, type Appointment } from '@/lib/api';
@@ -25,6 +26,7 @@ export default function AgendaPage() {
   const [creating, setCreating] = useState<string | null>(null);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [showCanceled, setShowCanceled] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   // No mês, a grade começa na segunda da 1ª semana e termina no domingo da última.
   const from = view === 'mes' ? startOfWeek(startOfMonth(anchor)) : view === 'semana' ? startOfWeek(anchor) : anchor;
@@ -66,8 +68,12 @@ export default function AgendaPage() {
         eyebrow="Agenda"
         title={monthLabel(anchor).replace(/^\w/, (c) => c.toUpperCase())}
         text={title}
-        actions={<button type="button" className="btn btn-primary" onClick={() => setCreating(anchor < today() ? today() : anchor)}><Plus size={16} />Novo agendamento</button>}
+        actions={<>
+          <button type="button" className="btn btn-outline" onClick={() => setSharing(true)}><Link2 size={16} /><span className="hide-mobile">Link de agendamento</span></button>
+          <button type="button" className="btn btn-primary" onClick={() => setCreating(anchor < today() ? today() : anchor)}><Plus size={16} />Novo agendamento</button>
+        </>}
       />
+      {sharing && <BookingLinkModal onClose={() => setSharing(false)} />}
 
       <div className="agenda-bar">
         <div className="row">

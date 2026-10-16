@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { ToastProvider } from '@/components/ui';
@@ -12,6 +12,16 @@ export const metadata: Metadata = {
   title,
   description,
   openGraph: { title, description, siteName: 'Sysora', locale: 'pt_BR', type: 'website' },
+  // App instalável (manifest.ts): no iPhone, "Adicionar à Tela de Início" abre sem a barra do Safari.
+  // Ícones da aba e do iPhone: src/app/icon.png e src/app/apple-icon.png (convenção do Next).
+  appleWebApp: { capable: true, title: 'Sysora', statusBarStyle: 'black-translucent' },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f4f3' },
+    { media: '(prefers-color-scheme: dark)', color: '#080808' },
+  ],
 };
 
 // Aplica o tema salvo (ou o do sistema) antes da primeira pintura.

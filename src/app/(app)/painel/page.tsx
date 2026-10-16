@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowRight, Bot, CalendarCheck, Check, CalendarDays, ClipboardList, MessageCircle, Plus, QrCode, TrendingUp, Users } from 'lucide-react';
 import AppointmentDetails from '@/components/AppointmentDetails';
 import AppointmentModal from '@/components/AppointmentModal';
+import Insights from '@/components/Insights';
 import { Empty, Loading, useToast } from '@/components/ui';
 import { dashboardApi, errorMessage, surveyApi, type Appointment, type Dashboard } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -22,6 +23,7 @@ export default function PainelPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<Appointment | null>(null);
+  const [view, setView] = useState<'geral' | 'atendimento'>('geral');
   // Pesquisa inicial ainda não respondida: o aviso fica até a pessoa responder.
   const [surveyPending, setSurveyPending] = useState(false);
 
@@ -65,6 +67,12 @@ export default function PainelPage() {
         </div>
       </section>
 
+      <div className="tabs">
+        <button type="button" className={view === 'geral' ? 'on' : ''} onClick={() => setView('geral')}>Visão geral</button>
+        <button type="button" className={view === 'atendimento' ? 'on' : ''} onClick={() => setView('atendimento')}>Atendimento</button>
+      </div>
+
+      {view === 'atendimento' ? <Insights /> : <>
       {surveyPending && (
         <div className="card survey-invite">
           <span className="metric-icon"><ClipboardList size={18} /></span>
@@ -170,6 +178,7 @@ export default function PainelPage() {
           </div>
         </div>
       </div>
+      </>}
 
       {creating && <AppointmentModal onClose={() => setCreating(false)} onSaved={() => { setCreating(false); toast('Agendamento criado.'); load(); }} />}
       {selected && <AppointmentDetails appointment={selected} onClose={() => setSelected(null)} onChanged={load} />}

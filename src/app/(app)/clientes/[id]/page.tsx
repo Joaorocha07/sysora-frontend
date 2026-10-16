@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Bot, Cake, CalendarPlus, Mail, MessageCircle, Pencil, Phone, StickyNote, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bot, Cake, CalendarClock, CalendarPlus, Link2, Mail, MessageCircle, Pencil, Phone, StickyNote, Trash2, X } from 'lucide-react';
+import BookingLinkModal from '@/components/BookingLinkModal';
 import AppointmentDetails from '@/components/AppointmentDetails';
 import AppointmentModal from '@/components/AppointmentModal';
 import ClientFormModal from '@/components/ClientFormModal';
+import { ClientNotesCard, ClientTagsButton, SCHEDULED_STATUS, ScheduleMessageModal, StageSelect, TagChip, scheduledWhen } from '@/components/Crm';
 import { Avatar, ConfirmDialog, Empty, Loading, useToast } from '@/components/ui';
-import { clientsApi, errorMessage, type Appointment, type ClientDetail } from '@/lib/api';
+import { clientsApi, errorMessage, scheduledMessagesApi, type Appointment, type ClientDetail, type ScheduledMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { STATUS, brDate, money, relativeTime, today } from '@/lib/format';
 
@@ -22,11 +24,29 @@ export default function ClienteDetalhePage() {
   const [scheduling, setScheduling] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [selected, setSelected] = useState<Appointment | null>(null);
+  const [scheduled, setScheduled] = useState<ScheduledMessage[]>([]);
+  const [messageModal, setSchedulingMessage] = useState<ScheduledMessage | 'new' | null>(null);
+  const [sharingLink, setSharingLink] = useState(false);
 
   const load = useCallback(() => {
     clientsApi.get(id).then(setClient).catch((err) => { toast(errorMessage(err), true); router.replace('/clientes'); });
   }, [id, router, toast]);
   useEffect(load, [load]);
+
+  const loadScheduled = useCallback(() => {
+    scheduledMessagesApi.list({ clientId: id }).then(setScheduled).catch(() => {});
+  }, [id]);
+  useEffect(loadScheduled, [loadScheduled]);
+
+  async function cancelScheduled(m: ScheduledMessage) {
+    try {
+      await scheduledMessagesApi.cancel(m.id);
+      toast('Mensagem cancelada.');
+      loadScheduled();
+    } catch (err) {
+      toast(errorMessage(err), true);
+    }
+  }
 
   async function remove() {
     try {
@@ -72,6 +92,17 @@ export default function ClienteDetalhePage() {
             {client.birthday && <div className="row"><Cake size={16} className="muted" />{brDate(client.birthday)}</div>}
             {client.notes && <div className="row" style={{ alignItems: 'flex-start' }}><StickyNote size={16} className="muted" style={{ marginTop: 2 }} /><span style={{ whiteSpace: 'pre-wrap' }}>{client.notes}</span></div>}
           </div>
+          <div className="stack-sm">
+            <small>Etapa do funil</small>
+            <StageSelect clientId={client.id} value={client.stageId} onSaved={(stageId) => setClient({ ...client, stageId })} />
+          </div>
+          <div className="stack-sm">
+            <small>Etiquetas</small>
+            <div className="row-wrap" style={{ gap: 6 }}>
+              {(client.tags ?? []).map((t) => <TagChip key={t.id} tag={t} />)}
+              <ClientTagsButton clientId={client.id} value={(client.tags ?? []).map((t) => t.id)} onSaved={(tags) => setClient({ ...client, tags })} />
+            </div>
+          </div>
           <div className="grid-2" style={{ gap: 10 }}>
             <div className="card" style={{ boxShadow: 'none', padding: 14 }}><small>Atendimentos</small><strong style={{ display: 'block', fontSize: 22, fontFamily: 'var(--display)' }}>{client.appointments.filter((a) => a.status === 'COMPLETED').length}</strong></div>
             <div className="card" style={{ boxShadow: 'none', padding: 14 }}><small>Total gasto</small><strong style={{ display: 'block', fontSize: 22, fontFamily: 'var(--display)' }}>{money(spent)}</strong></div>
@@ -83,6 +114,10 @@ export default function ClienteDetalhePage() {
                 <MessageCircle size={16} />Conversa{client.lastMessageAt ? ` · ${relativeTime(client.lastMessageAt)}` : ''}
               </Link>
             )}
+            {client.whatsappId && (
+              <button type="button" className="btn btn-outline btn-block" onClick={() => setSchedulingMessage('new')}><CalendarClock size={16} />Agendar mensagem</button>
+            )}
+            <button type="button" className="btn btn-outline btn-block" onClick={() => setSharingLink(true)}><Link2 size={16} />Link de agendamento</button>
             <div className="row">
               <button type="button" className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setEditing(true)}><Pencil size={15} />Editar</button>
               {isAdmin && <button type="button" className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setRemoving(true)}><Trash2 size={15} />Excluir</button>}
@@ -107,12 +142,47 @@ export default function ClienteDetalhePage() {
               <Empty icon={<CalendarPlus size={22} />} title="Sem histórico" text="Os atendimentos deste cliente vão aparecer aqui." />
             )}
           </div>
+          {scheduled.length > 0 && (
+            <div className="card">
+              <div className="card-head"><div><h2>Mensagens agendadas</h2><p>Programadas pela equipe para este cliente</p></div></div>
+              <div className="sched-list" style={{ marginTop: 12 }}>
+                {scheduled.slice().reverse().slice(0, 10).map((m) => (
+                  <div key={m.id} className="sched-item">
+                    <div className="sched-when"><strong>{scheduledWhen(m.sendAt).split(' às ')[1]}</strong><small>{scheduledWhen(m.sendAt).split(' às ')[0]}</small></div>
+                    <div style={{ minWidth: 0 }}>
+                      <span className={`badge ${SCHEDULED_STATUS[m.status].badge}`} style={{ marginBottom: 4 }}>{SCHEDULED_STATUS[m.status].label}</span>
+                      <p>{m.text}</p>
+                      {m.error && <small>Motivo: {m.error}</small>}
+                    </div>
+                    <div className="row" style={{ gap: 2, justifyContent: 'flex-end' }}>
+                      {m.status === 'PENDING' && (
+                        <>
+                          <button type="button" className="icon-btn" onClick={() => setSchedulingMessage(m)} aria-label="Editar"><Pencil size={15} /></button>
+                          <button type="button" className="icon-btn" onClick={() => cancelScheduled(m)} aria-label="Cancelar envio"><X size={16} /></button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <ClientNotesCard clientId={client.id} />
         </div>
       </div>
 
       {editing && <ClientFormModal client={client} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); toast('Cliente atualizado.'); load(); }} />}
       {scheduling && <AppointmentModal defaultClient={client} onClose={() => setScheduling(false)} onSaved={() => { setScheduling(false); toast('Agendamento criado.'); load(); }} />}
       {selected && <AppointmentDetails appointment={selected} onClose={() => setSelected(null)} onChanged={load} />}
+      {sharingLink && <BookingLinkModal client={client} onClose={() => setSharingLink(false)} />}
+      {messageModal && (
+        <ScheduleMessageModal
+          client={client}
+          message={messageModal === 'new' ? null : messageModal}
+          onClose={() => setSchedulingMessage(null)}
+          onSaved={() => { setSchedulingMessage(null); toast('Mensagem agendada.'); loadScheduled(); }}
+        />
+      )}
       {removing && (
         <ConfirmDialog
           title="Excluir cliente?"

@@ -1,13 +1,12 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import {
-  ArrowRight, Bell, Bot, Building2, CalendarCheck, CalendarDays, Check, LayoutDashboard, MessageCircle,
-  ShieldCheck, Sparkles, UserCog, Users, Wrench,
+  ArrowRight, AudioLines, Bell, Bot, Building2, CalendarCheck, CalendarDays, Check, KanbanSquare, LayoutDashboard, Link2,
+  MessageCircle, Repeat, ShieldCheck, Smartphone, Sparkles, UserCog, Users, Wrench,
 } from 'lucide-react';
 import { LegalLinks } from '@/components/LegalLayout';
 import Logo from '@/components/Logo';
 import PlanCard from '@/components/PlanCard';
-import { money } from '@/lib/format';
 import { PLANS, TRIAL_LABEL } from '@/lib/plans';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -18,6 +17,12 @@ const features = [
   { icon: Wrench, title: 'Cadastro de serviços', text: 'Nome, descrição, duração e preço. O bot usa esse catálogo para oferecer as opções e calcular o tempo de cada agendamento.' },
   { icon: Bell, title: 'Lembretes e confirmação', text: 'Mensagem na véspera e pouco antes do horário. O cliente confirma, remarca ou cancela respondendo com um número.' },
   { icon: MessageCircle, title: 'Atendimento humano quando precisar', text: 'A equipe acompanha as conversas e responde pelo sistema. O bot pausa com aquele cliente e volta sozinho depois.' },
+  { icon: KanbanSquare, title: 'Funil de vendas e etiquetas', text: 'Arraste cada cliente pelas etapas do funil, marque com etiquetas coloridas e filtre as conversas. Respostas rápidas com "/" agilizam o chat.' },
+  { icon: Repeat, title: 'Follow-up e reativação', text: 'O bot retoma quem parou de responder, envia mensagens agendadas e chama de volta os clientes sumidos com o link para marcar um horário.' },
+  { icon: Link2, title: 'Link de agendamento', text: 'Gere um link para um cliente ou um link aberto para divulgar. A pessoa escolhe o serviço, o dia e o horário e recebe o comprovante.' },
+  { icon: AudioLines, title: 'Atendimento com IA', text: 'No plano Avançado, o bot entende mensagens escritas do jeito do cliente e até áudios, e a IA escreve respostas rápidas, follow-ups e mensagens.', dark: true },
+  { icon: LayoutDashboard, title: 'Indicadores do atendimento', text: 'Veja quantas conversas chegaram, quanto tempo a equipe leva para responder e quantas viraram agendamento, por período.' },
+  { icon: Smartphone, title: 'App no celular', text: 'Instale o Sysora na tela inicial e receba notificação quando um cliente escrever ou pedir para falar com a equipe.' },
 ];
 
 const steps = [
@@ -37,32 +42,6 @@ const roles = [
     items: ['Consulta e organiza a agenda', 'Cadastra e atualiza clientes', 'Responde as conversas do WhatsApp', 'Marca atendimentos como concluídos'],
   },
 ];
-
-// Diferenças entre os planos (tabela da seção Planos). true/false = tem ou não.
-const [INICIAL, AVANCADO] = PLANS;
-const perMonthYearly = (cents: number) => `${money(Math.round(cents / 12))}/mês`;
-const comparison: { label: string; inicial: string | boolean; avancado: string | boolean }[] = [
-  { label: 'Preço mensal', inicial: money(INICIAL.priceCents), avancado: money(AVANCADO.priceCents) },
-  { label: 'No plano anual (pagamento único)', inicial: perMonthYearly(INICIAL.yearlyPriceCents), avancado: perMonthYearly(AVANCADO.yearlyPriceCents) },
-  { label: 'Empresas', inicial: '1', avancado: `Até ${AVANCADO.maxCompanies}` },
-  { label: 'Números de WhatsApp', inicial: '1', avancado: '1 por empresa' },
-  { label: 'Equipe por empresa', inicial: `Administrador + ${INICIAL.maxEmployees}`, avancado: `Administrador + ${AVANCADO.maxEmployees}` },
-  { label: 'Chatbot que cadastra e agenda', inicial: true, avancado: true },
-  { label: 'Agenda, clientes e serviços ilimitados', inicial: true, avancado: true },
-  { label: 'Lembretes e confirmação de presença', inicial: true, avancado: true },
-  { label: 'Sora: IA que monta o fluxo do bot', inicial: 'Uso básico no mês', avancado: 'Mais que o dobro de uso' },
-  { label: 'Bot entende mensagens escritas do jeito do cliente', inicial: false, avancado: true },
-  { label: 'Bot entende áudios', inicial: false, avancado: true },
-  { label: 'Descrições de serviços com IA', inicial: false, avancado: true },
-  { label: 'Troca rápida entre as empresas', inicial: false, avancado: true },
-  { label: 'Suporte prioritário', inicial: false, avancado: true },
-];
-
-function CompareCell({ value }: { value: string | boolean }) {
-  if (value === true) return <Check size={18} aria-label="Incluído" />;
-  if (value === false) return <span className="muted" aria-label="Não incluído">—</span>;
-  return <>{value}</>;
-}
 
 export default function Landing() {
   return (
@@ -173,26 +152,6 @@ export default function Landing() {
             ))}
           </div>
 
-          <div className="plan-compare">
-            <h3>Compare os planos</h3>
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr><th>Recurso</th><th>{INICIAL.name}</th><th>{AVANCADO.name}</th></tr>
-                </thead>
-                <tbody>
-                  {comparison.map((row) => (
-                    <tr key={row.label}>
-                      <td>{row.label}</td>
-                      <td><CompareCell value={row.inicial} /></td>
-                      <td><CompareCell value={row.avancado} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <small className="muted">Os recursos de IA são liberados a partir do primeiro pagamento; o teste grátis de {TRIAL_LABEL} é sem IA.</small>
-          </div>
         </section>
 
         <section className="section" id="acessos">

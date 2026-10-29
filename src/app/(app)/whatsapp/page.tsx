@@ -76,6 +76,9 @@ function Connection() {
   const [busy, setBusy] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [testTo, setTestTo] = useState('');
+  // Conexão por número (código) em vez do QR Code.
+  const [byCode, setByCode] = useState(false);
+  const [codePhone, setCodePhone] = useState('');
   const previous = useRef<WhatsAppStatus['status'] | null>(null);
   // App da Meta da Sysora configurado (painel master → WhatsApp oficial)? Sem ele, só o QR Code.
   const [cloudConfig, setCloudConfig] = useState<WhatsAppCloudConfig | null>(null);
@@ -104,6 +107,11 @@ function Connection() {
   async function connect() {
     setBusy(true);
     try { setState(await whatsappApi.connect()); } catch (err) { toast(errorMessage(err), true); } finally { setBusy(false); }
+  }
+
+  async function connectCode() {
+    setBusy(true);
+    try { setState(await whatsappApi.connectWithCode(codePhone)); } catch (err) { toast(errorMessage(err), true); } finally { setBusy(false); }
   }
 
   async function disconnect() {
@@ -141,10 +149,18 @@ function Connection() {
           <div className="qr-frame">
             {state.status === 'qr' && state.qr ? (
               <img src={state.qr} alt="QR Code para conectar o WhatsApp" />
+            ) : state.pairingCode ? (
+              <div className="placeholder" style={{ gap: 10 }}>
+                <KeyRound size={34} color="#111" />
+                <strong style={{ fontSize: 30, letterSpacing: 4, fontFamily: 'var(--display)', color: '#111' }}>
+                  {state.pairingCode.length === 8 ? `${state.pairingCode.slice(0, 4)}-${state.pairingCode.slice(4)}` : state.pairingCode}
+                </strong>
+                <span>Digite este código no WhatsApp</span>
+              </div>
             ) : (
               <div className="placeholder">
-                {connected ? <Smartphone size={42} color="#111" /> : state.status === 'connecting' ? <span className="spinner" style={{ width: 32, height: 32, color: '#111' }} /> : <QrCode size={42} color="#111" />}
-                <span>{connected ? 'Aparelho conectado' : state.status === 'connecting' ? 'Preparando conexão...' : 'Clique em “Gerar QR Code”'}</span>
+                {connected ? <Smartphone size={42} color="#111" /> : state.status === 'connecting' ? <span className="spinner" style={{ width: 32, height: 32, color: '#111' }} /> : byCode ? <KeyRound size={42} color="#111" /> : <QrCode size={42} color="#111" />}
+                <span>{connected ? 'Aparelho conectado' : state.status === 'connecting' ? 'Preparando conexão...' : byCode ? 'Digite o número e gere o código' : 'Clique em “Gerar QR Code”'}</span>
               </div>
             )}
           </div>
@@ -153,7 +169,10 @@ function Connection() {
             <div>
               <div className="status-line">
                 <span className={`status-dot${connected ? ' on' : state.status !== 'disconnected' ? ' wait' : ''}`} />
-                {connected ? 'Conectado' : state.status === 'qr' ? 'Aguardando leitura do QR Code' : state.status === 'connecting' ? 'Conectando...' : 'Desconectado'}
+                {connected ? 'Conectado'
+                  : state.pairingCode ? 'Aguardando o código no celular'
+                  : state.status === 'qr' ? 'Aguardando leitura do QR Code'
+                  : state.status === 'connecting' ? 'Conectando...' : 'Desconectado'}
               </div>
               {connected && <h2 style={{ marginTop: 10, fontSize: 24 }}>{formatWaPhone(state.phone)}</h2>}
               {state.error && <p className="form-error" style={{ marginTop: 12 }}>{state.error}</p>}
@@ -170,22 +189,65 @@ function Connection() {
               </>
             ) : (
               <>
-                <ol className="steps">
-                  <li><span>Abra o <strong>WhatsApp</strong> no celular da empresa.</span></li>
-                  <li><span>Toque em <strong>Mais opções</strong> (⋮) ou <strong>Configurações</strong> e depois em <strong>Aparelhos conectados</strong>.</span></li>
-                  <li><span>Toque em <strong>Conectar um aparelho</strong> e aponte a câmera para o QR Code ao lado.</span></li>
-                </ol>
-                <div className="row-wrap">
-                  <button type="button" className="btn btn-primary" onClick={connect} disabled={busy || state.status === 'connecting'}>
-                    {busy ? <span className="spinner" /> : state.status === 'qr' ? <RefreshCw size={16} /> : <QrCode size={16} />}
-                    {state.status === 'qr' ? 'Aguardando leitura...' : 'Gerar QR Code'}
-                  </button>
-                  {state.status !== 'disconnected' && <button type="button" className="btn btn-ghost" onClick={() => setConfirmDisconnect(true)}>Cancelar</button>}
-                </div>
-                <p className="hint">
-                  Funciona como o WhatsApp Web: a sessão fica salva e reconecta sozinha se o servidor reiniciar.
-                  {choosing ? ' Não é uma conexão oficial da Meta: o WhatsApp pode restringir números conectados assim.' : ''}
-                </p>
+                {/* Escolha entre QR Code e código por número (só quando ainda não começou a conectar). */}
+                {state.status === 'disconnected' && !state.pairingCode && (
+                  <div className="segmented" style={{ width: 'fit-content', maxWidth: '100%' }}>
+                    <button type="button" className={byCode ? '' : 'on'} onClick={() => setByCode(false)}><QrCode size={14} style={{ verticalAlign: -2, marginRight: 6 }} />QR Code</button>
+                    <button type="button" className={byCode ? 'on' : ''} onClick={() => setByCode(true)}><KeyRound size={14} style={{ verticalAlign: -2, marginRight: 6 }} />Por número</button>
+                  </div>
+                )}
+
+                {byCode ? (
+                  <>
+                    <ol className="steps">
+                      <li><span>Abra o <strong>WhatsApp</strong> no celular da empresa.</span></li>
+                      <li><span>Toque em <strong>Mais opções</strong> (⋮) ou <strong>Configurações</strong> e depois em <strong>Aparelhos conectados</strong>.</span></li>
+                      <li><span>Toque em <strong>Conectar um aparelho</strong> e depois em <strong>Conectar com número de telefone</strong>.</span></li>
+                      <li><span>Digite o código de 8 dígitos que aparece {state.pairingCode ? 'ao lado' : 'aqui'}.</span></li>
+                    </ol>
+                    {state.pairingCode ? (
+                      <div className="row-wrap">
+                        <button type="button" className="btn btn-ghost" onClick={() => setConfirmDisconnect(true)}>Cancelar</button>
+                      </div>
+                    ) : (
+                      <div className="row-wrap">
+                        <input
+                          className="input"
+                          style={{ width: 220 }}
+                          inputMode="tel"
+                          placeholder="55 31 99999-9999"
+                          value={codePhone}
+                          onChange={(e) => setCodePhone(e.target.value)}
+                          aria-label="Número com DDI e DDD"
+                        />
+                        <button type="button" className="btn btn-primary" onClick={connectCode} disabled={busy || state.status === 'connecting' || codePhone.replace(/\D/g, '').length < 12}>
+                          {busy ? <span className="spinner" /> : <KeyRound size={16} />}Gerar código
+                        </button>
+                        {state.status !== 'disconnected' && <button type="button" className="btn btn-ghost" onClick={() => setConfirmDisconnect(true)}>Cancelar</button>}
+                      </div>
+                    )}
+                    <p className="hint">Informe o número com DDI e DDD (ex.: 55 31 99999-9999). O código some em alguns minutos: se expirar, gere outro.</p>
+                  </>
+                ) : (
+                  <>
+                    <ol className="steps">
+                      <li><span>Abra o <strong>WhatsApp</strong> no celular da empresa.</span></li>
+                      <li><span>Toque em <strong>Mais opções</strong> (⋮) ou <strong>Configurações</strong> e depois em <strong>Aparelhos conectados</strong>.</span></li>
+                      <li><span>Toque em <strong>Conectar um aparelho</strong> e aponte a câmera para o QR Code ao lado.</span></li>
+                    </ol>
+                    <div className="row-wrap">
+                      <button type="button" className="btn btn-primary" onClick={connect} disabled={busy || state.status === 'connecting'}>
+                        {busy ? <span className="spinner" /> : state.status === 'qr' ? <RefreshCw size={16} /> : <QrCode size={16} />}
+                        {state.status === 'qr' ? 'Aguardando leitura...' : 'Gerar QR Code'}
+                      </button>
+                      {state.status !== 'disconnected' && <button type="button" className="btn btn-ghost" onClick={() => setConfirmDisconnect(true)}>Cancelar</button>}
+                    </div>
+                    <p className="hint">
+                      Funciona como o WhatsApp Web: a sessão fica salva e reconecta sozinha se o servidor reiniciar.
+                      {choosing ? ' Não é uma conexão oficial da Meta: o WhatsApp pode restringir números conectados assim.' : ''}
+                    </p>
+                  </>
+                )}
               </>
             )}
           </div>

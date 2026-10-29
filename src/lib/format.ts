@@ -49,6 +49,10 @@ export const clock = (value: string) => new Date(value).toLocaleTimeString('pt-B
 
 export const money = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+// Minúsculas e sem acentos, para busca que ignora acento: "João" e "joao"
+// batem igual. Use nos dois lados da comparação (termo e texto).
+export const foldAccents = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 // Máscara de valor em reais enquanto digita (estilo caixa registradora: os
 // dígitos entram pela direita). "4590" -> "45,90"; "123456" -> "1.234,56".
 // Até R$ 1.000.000,00 (limite do backend). Vazio continua vazio.

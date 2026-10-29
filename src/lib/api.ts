@@ -72,6 +72,20 @@ export type Service = {
   active: boolean; position: number; _count?: { appointments: number };
   // Produto que é conta de acesso (códigos por e-mail): o bot entrega o código dela.
   accessEmail?: string | null;
+  // Custo mensal da conta em centavos (só produto). 0 = sem custo.
+  costCents?: number;
+};
+
+// Lucro por conta de acesso (produto): pessoas em dia, receita, custo e lucro.
+// O custo só é cobrado quando a conta tem ao menos uma pessoa logada.
+export type AccountReport = {
+  id: string; name: string; accessEmail: string | null; active: boolean;
+  priceCents: number; unitCostCents: number;
+  activeClients: number; revenueCents: number; costCents: number; profitCents: number;
+};
+export type AccountsReport = {
+  accounts: AccountReport[];
+  totals: { accounts: number; activeAccounts: number; activeClients: number; revenueCents: number; costCents: number; profitCents: number };
 };
 
 export type AppointmentItem = { id: string; serviceId: string | null; kind: ServiceKind; name: string; durationMinutes: number; priceCents: number };
@@ -123,6 +137,8 @@ export type WhatsAppCloudInfo = {
 };
 export type WhatsAppStatus = {
   status: 'disconnected' | 'connecting' | 'qr' | 'connected'; qr: string | null; phone: string | null; error: string | null;
+  // Código de 8 dígitos para conectar pelo número (alternativa ao QR Code).
+  pairingCode?: string | null;
   // cloud = API oficial; qr = QR Code (WhatsApp Web); null = nada conectado.
   provider: 'cloud' | 'qr' | null; cloud: WhatsAppCloudInfo | null;
 };
@@ -551,7 +567,7 @@ export const clientSubscriptionsApi = {
   create: (input: ClientSubscriptionInput) => send<{ subscription: ClientSubscription }>('POST', '/client-subscriptions', input).then((r) => r.subscription),
   renew: (id: string, input: { startDate?: string; months?: number; priceCents?: number; notes?: string | null }) =>
     send<{ subscription: ClientSubscription }>('POST', `/client-subscriptions/${id}/renew`, input).then((r) => r.subscription),
-  update: (id: string, input: Partial<Pick<ClientSubscriptionInput, 'name' | 'priceCents' | 'startDate' | 'dueDate' | 'notes'>>) =>
+  update: (id: string, input: Partial<Pick<ClientSubscriptionInput, 'serviceId' | 'name' | 'priceCents' | 'startDate' | 'dueDate' | 'notes'>>) =>
     send<{ subscription: ClientSubscription }>('PATCH', `/client-subscriptions/${id}`, input).then((r) => r.subscription),
   cancel: (id: string) => send<{ subscription: ClientSubscription }>('POST', `/client-subscriptions/${id}/cancel`).then((r) => r.subscription),
   remove: (id: string) => send('DELETE', `/client-subscriptions/${id}`),
@@ -633,9 +649,10 @@ export const clientsApi = {
   remove: (id: string) => send('DELETE', `/clients/${id}`),
 };
 
-export type ServiceInput = { kind?: ServiceKind; name: string; description?: string | null; durationMinutes: number; priceCents: number; active?: boolean; position?: number; accessEmail?: string | null };
+export type ServiceInput = { kind?: ServiceKind; name: string; description?: string | null; durationMinutes: number; priceCents: number; costCents?: number; active?: boolean; position?: number; accessEmail?: string | null };
 export const servicesApi = {
   list: () => get<{ services: Service[] }>('/services').then((r) => r.services),
+  accountsReport: () => get<AccountsReport>('/services/accounts-report'),
   create: (input: ServiceInput) => send<{ service: Service }>('POST', '/services', input).then((r) => r.service),
   update: (id: string, input: Partial<ServiceInput>) => send<{ service: Service }>('PATCH', `/services/${id}`, input).then((r) => r.service),
   remove: (id: string) => send('DELETE', `/services/${id}`),
@@ -832,6 +849,7 @@ export const settingsApi = {
 export const whatsappApi = {
   status: () => get<WhatsAppStatus>('/whatsapp/status'),
   connect: () => send<WhatsAppStatus>('POST', '/whatsapp/connect'),
+  connectWithCode: (phone: string) => send<WhatsAppStatus>('POST', '/whatsapp/connect-code', { phone }),
   disconnect: () => send<WhatsAppStatus>('POST', '/whatsapp/disconnect'),
   test: (to: string) => send<{ message: string }>('POST', '/whatsapp/test', { to }),
   cloudConfig: () => get<WhatsAppCloudConfig>('/whatsapp/cloud/config'),

@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Clock, KeyRound, Package, Pencil, Plus, Sparkles, Tags, Trash2, Undo2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clock, KeyRound, Package, Pencil, Plus, Sparkles, Tags, Trash2, TrendingUp, Undo2, Users } from 'lucide-react';
 import { ConfirmDialog, Empty, Field, FormError, Modal, PageHead, Switch, useToast } from '@/components/ui';
-import { errorMessage, servicesApi, settingsApi, type Service, type ServiceKind } from '@/lib/api';
+import { errorMessage, servicesApi, settingsApi, type AccountsReport, type Service, type ServiceKind } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AiPlanBadge, useAiPlan } from '@/components/AiPlanLock';
 import { centsToMoneyInput, duration, maskMoney, money, parseMoney } from '@/lib/format';
@@ -29,6 +29,8 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
   const [description, setDescription] = useState(service?.description ?? '');
   const [minutes, setMinutes] = useState(service?.durationMinutes || 60);
   const [price, setPrice] = useState(service ? centsToMoneyInput(service.priceCents) : '');
+  // Custo mensal da conta (só produto que é conta de acesso). Ex.: R$ 100 do ChatGPT.
+  const [cost, setCost] = useState(service?.costCents ? centsToMoneyInput(service.costCents) : '');
   const [active, setActive] = useState(service?.active ?? true);
   // Conta de acesso (códigos por e-mail): só nas empresas com o recurso liberado.
   const [accessEmail, setAccessEmail] = useState(service?.accessEmail ?? '');
@@ -62,7 +64,7 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
     setError(null);
     setBusy(true);
     try {
-      const input = { kind, name, description: description || null, durationMinutes: product ? 0 : Number(minutes), priceCents: parseMoney(price), active, ...(codesEnabled ? { accessEmail: product ? accessEmail.trim() || null : null } : {}) };
+      const input = { kind, name, description: description || null, durationMinutes: product ? 0 : Number(minutes), priceCents: parseMoney(price), active, ...(product ? { costCents: parseMoney(cost) } : {}), ...(codesEnabled ? { accessEmail: product ? accessEmail.trim() || null : null } : {}) };
       if (service) await servicesApi.update(service.id, input);
       else await servicesApi.create(input);
       onSaved();
@@ -132,6 +134,13 @@ function ServiceModal({ service, initialKind = 'SERVICE', onClose, onSaved }: { 
             <input className="input" style={{ paddingLeft: 46 }} inputMode="numeric" value={price} onChange={(e) => setPrice(maskMoney(e.target.value))} placeholder="0,00" aria-label="Preço em reais" />
           </div>
         </Field>
+        {product && codesEnabled && (
+          <Field label="Custo da conta por mês (opcional)" hint="O quanto você paga por esta conta (ex.: R$ 100 do ChatGPT). Serve para calcular o lucro no catálogo. Conta sem ninguém logado não entra no custo.">
+            <div className="input-icon"><span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontWeight: 600 }}>R$</span>
+              <input className="input" style={{ paddingLeft: 46 }} inputMode="numeric" value={cost} onChange={(e) => setCost(maskMoney(e.target.value))} placeholder="0,00" aria-label="Custo da conta em reais" />
+            </div>
+          </Field>
+        )}
         <Switch
           checked={active}
           onChange={setActive}
@@ -147,6 +156,7 @@ export default function ServicosPage() {
   const { isAdmin } = useAuth();
   const toast = useToast();
   const [services, setServices] = useState<Service[] | null>(null);
+  const [report, setReport] = useState<AccountsReport | null>(null);
   const [editing, setEditing] = useState<Service | ServiceKind | null>(null);
   const creating = editing === 'SERVICE' || editing === 'PRODUCT';
   const [removing, setRemoving] = useState<Service | null>(null);
@@ -156,6 +166,8 @@ export default function ServicosPage() {
 
   const load = useCallback(() => {
     servicesApi.list().then(setServices).catch((err) => toast(errorMessage(err), true));
+    // Relatório de lucro das contas de acesso (silencioso: se falhar, só não mostra o painel).
+    servicesApi.accountsReport().then(setReport).catch(() => setReport(null));
   }, [toast]);
   useEffect(load, [load]);
 
@@ -211,6 +223,78 @@ export default function ServicosPage() {
           ))}
         </div>
       )}
+
+      {report && report.accounts.length > 0 && (() => {
+        // Só mostra contas que têm custo cadastrado ou alguém logado — conta
+        // sem custo e sem gente não interessa pro cálculo de lucro.
+        const accounts = report.accounts.filter((a) => a.unitCostCents > 0 || a.activeClients > 0);
+        if (!accounts.length) return null;
+        const { totals } = report;
+        const cards = [
+          { label: 'Pessoas logadas', value: String(totals.activeClients), hint: `em ${totals.activeAccounts} ${totals.activeAccounts === 1 ? 'conta em uso' : 'contas em uso'}`, icon: Users },
+          { label: 'Receita por mês', value: money(totals.revenueCents), hint: 'do que os clientes pagam', icon: TrendingUp },
+          { label: 'Custo por mês', value: money(totals.costCents), hint: 'só das contas em uso', icon: KeyRound },
+          { label: 'Lucro por mês', value: money(totals.profitCents), hint: 'receita menos custo', icon: TrendingUp },
+        ];
+        return (
+          <div className="card" style={{ marginBottom: 16, padding: '22px 24px 24px' }}>
+            <div style={{ marginBottom: 18 }}>
+              <strong style={{ display: 'block', fontSize: 16 }}>Contas de acesso</strong>
+              <small className="muted">Quantas pessoas em cada conta e o lucro. Conta sem ninguém logado não entra no custo.</small>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 14,
+                marginBottom: 20,
+              }}
+            >
+              {cards.map(({ label, value, hint, icon: Icon }) => (
+                <div
+                  key={label}
+                  style={{
+                    border: '1px solid var(--line)',
+                    borderRadius: 14,
+                    background: 'var(--surface-2)',
+                    padding: '16px 18px',
+                  }}
+                >
+                  <div className="metric-top" style={{ marginBottom: 10 }}>
+                    {label}
+                    <span className="metric-icon"><Icon size={16} /></span>
+                  </div>
+                  <strong style={{ display: 'block', fontFamily: 'var(--display)', fontSize: 26, fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1.1 }}>{value}</strong>
+                  <small className="muted" style={{ display: 'block', marginTop: 4 }}>{hint}</small>
+                </div>
+              ))}
+            </div>
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Conta</th><th>Pessoas</th><th className="hide-mobile">Preço/pessoa</th><th className="hide-mobile">Custo</th><th>Lucro/mês</th></tr></thead>
+                <tbody>
+                  {accounts.map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        <strong>{a.name}</strong>
+                        {!a.active && <span className="badge dashed" style={{ marginLeft: 8 }}>Inativo</span>}
+                        {a.accessEmail && <small className="muted" style={{ display: 'block' }}><KeyRound size={12} style={{ verticalAlign: -2, marginRight: 4 }} />{a.accessEmail}</small>}
+                      </td>
+                      <td>
+                        <span className="row" style={{ gap: 6 }}><Users size={14} className="muted" />{a.activeClients}</span>
+                        {a.activeClients === 0 && a.unitCostCents > 0 && <small className="muted" style={{ display: 'block' }}>sem custo (ninguém logado)</small>}
+                      </td>
+                      <td className="hide-mobile mono">{a.priceCents ? money(a.priceCents) : <span className="muted">—</span>}</td>
+                      <td className="hide-mobile mono">{a.costCents ? money(a.costCents) : <span className="muted">—</span>}</td>
+                      <td className="mono" style={{ fontWeight: 600, color: a.profitCents < 0 ? 'var(--danger, #dc2626)' : undefined }}>{money(a.profitCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="card">
         {services === null ? (

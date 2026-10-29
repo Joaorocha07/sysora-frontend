@@ -7,7 +7,7 @@ import {
   clientSubscriptionsApi, clientsApi, errorMessage, servicesApi, settingsApi, type Client, type ClientSubscription, type Service,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { brDate, centsToMoneyInput, maskMoney, maskPhone, money, parseMoney, today } from '@/lib/format';
+import { brDate, centsToMoneyInput, foldAccents, maskMoney, maskPhone, money, parseMoney, today } from '@/lib/format';
 
 // Assinaturas dos clientes: produto vendido por mês, com a data da compra e o
 // vencimento. O bot registra sozinho a venda das contas de acesso; a equipe
@@ -199,8 +199,8 @@ function RenewModal({ subscription, onClose, onSaved }: { subscription: ClientSu
 }
 
 // ---------- Histórico e edição ----------
-function HistoryModal({ subscription, isAdmin, onClose, onChanged }: {
-  subscription: ClientSubscription; isAdmin: boolean; onClose: () => void; onChanged: (message: string) => void;
+function HistoryModal({ subscription, products, isAdmin, onClose, onChanged }: {
+  subscription: ClientSubscription; products: Service[]; isAdmin: boolean; onClose: () => void; onChanged: (message: string) => void;
 }) {
   const toast = useToast();
   const [periods, setPeriods] = useState<ClientSubscription[] | null>(null);
@@ -212,6 +212,42 @@ function HistoryModal({ subscription, isAdmin, onClose, onChanged }: {
     clientSubscriptionsApi.ofClient(subscription.clientId).then(setPeriods).catch((err) => toast(errorMessage(err), true));
   }, [subscription.clientId, toast]);
   useEffect(load, [load]);
+
+  // Agrupa os pagamentos por produto (serviceId, ou nome quando avulso) para
+  // mostrar que renovações são a mesma assinatura — não vendas diferentes.
+  const keyOf = (p: ClientSubscription) => p.serviceId ?? `name:${p.name.trim().toLowerCase()}`;
+  const groups = useMemo(() => {
+    const list = periods ?? [];
+    const byKey = new Map<string, ClientSubscription[]>();
+    for (const p of list) {
+      const key = keyOf(p);
+      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(p);
+    }
+    // Resumo por produto: nº de pagamentos (só os não cancelados contam no
+    // total pago) e total acumulado, e o id do período mais antigo (1ª compra).
+    return [...byKey.values()].map((items) => {
+      // items vem do mais novo ao mais antigo; o último é a 1ª compra.
+      const firstBuyId = items[items.length - 1]?.id;
+      const paid = items.filter((p) => !p.canceledAt);
+      const totalCents = paid.reduce((sum, p) => sum + p.priceCents, 0);
+      return { name: items[0].name, payments: paid.length, totalCents, firstBuyId };
+    });
+  }, [periods]);
+  // Para marcar cada linha como 1ª compra ou renovação.
+  const firstBuyIds = useMemo(() => new Set(groups.map((g) => g.firstBuyId)), [groups]);
+  // Período atual de cada produto (o mais recente): só nele mostramos o status
+  // de vencimento. Os anteriores já foram renovados — mostram só as datas.
+  const currentIds = useMemo(() => {
+    const list = periods ?? [];
+    const seen = new Set<string>();
+    const ids = new Set<string>();
+    for (const p of list) { // vem do mais novo ao mais antigo
+      const key = keyOf(p);
+      if (!seen.has(key)) { seen.add(key); ids.add(p.id); }
+    }
+    return ids;
+  }, [periods]);
+  const grandTotalCents = groups.reduce((sum, g) => sum + g.totalCents, 0);
 
   async function runConfirm() {
     if (!confirm) return;
@@ -235,41 +271,73 @@ function HistoryModal({ subscription, isAdmin, onClose, onChanged }: {
         {periods === null ? (
           <div className="loading-screen" style={{ minHeight: 120 }}><span className="spinner" /></div>
         ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>Produto</th><th>Compra</th><th>Vencimento</th><th className="hide-mobile">Valor</th><th /></tr></thead>
-              <tbody>
-                {periods.map((p) => {
-                  const { status, label } = statusOf(p);
-                  return (
-                    <tr key={p.id}>
-                      <td>
-                        <strong>{p.name}</strong>
-                        <small className="muted" style={{ display: 'block' }}>
-                          {p.source === 'BOT' ? 'Registrada pelo bot' : 'Registrada pela equipe'}{p.notes ? ` · ${p.notes}` : ''}
-                        </small>
-                      </td>
-                      <td className="mono">{brDate(p.startDate)}</td>
-                      <td><span className="mono">{brDate(p.dueDate)}</span> <span className={`badge ${BADGE[status]}`}>{label}</span></td>
-                      <td className="hide-mobile mono">{money(p.priceCents)}</td>
-                      <td>
-                        <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-                          <button type="button" className="icon-btn" title="Editar datas" aria-label="Editar" onClick={() => setEditing(p)}><Pencil size={15} /></button>
-                          {!p.canceledAt && <button type="button" className="icon-btn" title="Cancelar assinatura" aria-label="Cancelar" onClick={() => setConfirm({ kind: 'cancel', period: p })}><XCircle size={15} /></button>}
-                          {isAdmin && <button type="button" className="icon-btn" title="Apagar registro" aria-label="Apagar" onClick={() => setConfirm({ kind: 'remove', period: p })}><Trash2 size={15} /></button>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {groups.length > 0 && (
+              <div
+                style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between',
+                  border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surface-2)', padding: '12px 16px', marginBottom: 16,
+                }}
+              >
+                <div className="stack" style={{ gap: 2 }}>
+                  {groups.map((g) => (
+                    <small key={g.name} className="muted">
+                      <strong style={{ color: 'var(--ink)' }}>{g.name}</strong> · {g.payments} {g.payments === 1 ? 'pagamento' : 'pagamentos'} · {money(g.totalCents)} no total
+                    </small>
+                  ))}
+                </div>
+                {groups.length > 1 && (
+                  <div style={{ textAlign: 'right' }}>
+                    <small className="muted" style={{ display: 'block' }}>Total pago</small>
+                    <strong className="mono" style={{ fontSize: 18 }}>{money(grandTotalCents)}</strong>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Produto</th><th>Compra</th><th>Vencimento</th><th className="hide-mobile">Valor</th><th /></tr></thead>
+                <tbody>
+                  {periods.map((p) => {
+                    const { status, label } = statusOf(p);
+                    const isFirstBuy = firstBuyIds.has(p.id);
+                    const isCurrent = currentIds.has(p.id);
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <strong>{p.name}</strong>
+                          <span className="badge plain soft" style={{ marginLeft: 6 }}>{isFirstBuy ? '1ª compra' : 'Renovação'}</span>
+                          <small className="muted" style={{ display: 'block' }}>
+                            {p.source === 'BOT' ? 'Registrada pelo bot' : 'Registrada pela equipe'}{p.notes ? ` · ${p.notes}` : ''}
+                          </small>
+                        </td>
+                        <td className="mono">{brDate(p.startDate)}</td>
+                        <td>
+                          <span className="mono">{brDate(p.dueDate)}</span>
+                          {/* Só o período atual mostra o status; os já renovados ficam só com as datas. */}
+                          {isCurrent && <> <span className={`badge ${BADGE[status]}`}>{label}</span></>}
+                        </td>
+                        <td className="hide-mobile mono">{money(p.priceCents)}</td>
+                        <td>
+                          <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+                            <button type="button" className="icon-btn" title="Editar datas" aria-label="Editar" onClick={() => setEditing(p)}><Pencil size={15} /></button>
+                            {!p.canceledAt && <button type="button" className="icon-btn" title="Cancelar assinatura" aria-label="Cancelar" onClick={() => setConfirm({ kind: 'cancel', period: p })}><XCircle size={15} /></button>}
+                            {isAdmin && <button type="button" className="icon-btn" title="Apagar registro" aria-label="Apagar" onClick={() => setConfirm({ kind: 'remove', period: p })}><Trash2 size={15} /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Modal>
       {editing && (
         <EditPeriodModal
           period={editing}
+          products={products}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); onChanged('Assinatura atualizada.'); load(); }}
         />
@@ -291,11 +359,22 @@ function HistoryModal({ subscription, isAdmin, onClose, onChanged }: {
   );
 }
 
-function EditPeriodModal({ period, onClose, onSaved }: { period: ClientSubscription; onClose: () => void; onSaved: () => void }) {
+function EditPeriodModal({ period, products, onClose, onSaved }: { period: ClientSubscription; products: Service[]; onClose: () => void; onSaved: () => void }) {
+  // serviceId vazio = "Outro" (nome digitado à mão). Se o produto atual não
+  // está mais na lista (inativo/apagado), cai em "Outro" mantendo o nome.
+  const known = products.some((p) => p.id === period.serviceId);
+  const [serviceId, setServiceId] = useState(known ? period.serviceId ?? '' : '');
   const [form, setForm] = useState({ name: period.name, price: centsToMoneyInput(period.priceCents), startDate: period.startDate, dueDate: period.dueDate, notes: period.notes ?? '' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: key === 'price' ? maskMoney(e.target.value) : e.target.value }));
+
+  // Trocou o produto (ex.: cliente migrou de conta): puxa nome e preço dele.
+  function pickProduct(id: string) {
+    setServiceId(id);
+    const product = products.find((p) => p.id === id);
+    if (product) setForm((f) => ({ ...f, name: product.name, price: centsToMoneyInput(product.priceCents) }));
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -303,7 +382,9 @@ function EditPeriodModal({ period, onClose, onSaved }: { period: ClientSubscript
     setBusy(true);
     try {
       await clientSubscriptionsApi.update(period.id, {
-        name: form.name, priceCents: parseMoney(form.price), startDate: form.startDate, dueDate: form.dueDate, notes: form.notes || null,
+        serviceId: serviceId || null,
+        name: serviceId ? undefined : form.name,
+        priceCents: parseMoney(form.price), startDate: form.startDate, dueDate: form.dueDate, notes: form.notes || null,
       });
       onSaved();
     } catch (err) {
@@ -323,7 +404,15 @@ function EditPeriodModal({ period, onClose, onSaved }: { period: ClientSubscript
     >
       <form id="edit-period" className="stack" onSubmit={submit}>
         <FormError message={error} />
-        <Field label="Nome"><input className="input" required maxLength={120} value={form.name} onChange={set('name')} /></Field>
+        <Field label="Produto">
+          <select className="select" value={serviceId} onChange={(e) => pickProduct(e.target.value)}>
+            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            <option value="">Outro (digitar o nome)</option>
+          </select>
+        </Field>
+        {!serviceId && (
+          <Field label="Nome da assinatura"><input className="input" required maxLength={120} value={form.name} onChange={set('name')} /></Field>
+        )}
         <div className="grid-3">
           <Field label="Valor (R$)"><input className="input" inputMode="numeric" value={form.price} onChange={set('price')} placeholder="0,00" /></Field>
           <Field label="Data da compra"><input className="input" type="date" required value={form.startDate} onChange={set('startDate')} /></Field>
@@ -364,11 +453,11 @@ export default function AssinantesPage() {
   }, [load]);
 
   const rows = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = foldAccents(search.trim());
     return (subscriptions ?? [])
       .map((s) => ({ ...s, ...statusOf(s) }))
       .filter((s) => filter === 'all' || s.status === filter)
-      .filter((s) => !term || s.client.name.toLowerCase().includes(term) || s.client.phone.includes(term) || s.name.toLowerCase().includes(term))
+      .filter((s) => !term || foldAccents(s.client.name).includes(term) || s.client.phone.includes(term) || foldAccents(s.name).includes(term))
       // Mais urgentes primeiro: vencidas e vencendo no topo.
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   }, [subscriptions, filter, search]);
@@ -485,6 +574,7 @@ export default function AssinantesPage() {
       {viewing && (
         <HistoryModal
           subscription={viewing}
+          products={products}
           isAdmin={isAdmin}
           onClose={() => { setViewing(null); load(); }}
           onChanged={(message) => toast(message)}

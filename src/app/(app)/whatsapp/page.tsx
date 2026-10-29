@@ -226,7 +226,7 @@ function Connection() {
                         {state.status !== 'disconnected' && <button type="button" className="btn btn-ghost" onClick={() => setConfirmDisconnect(true)}>Cancelar</button>}
                       </div>
                     )}
-                    <p className="hint">Informe o número com DDI e DDD (ex.: 55 31 99999-9999). O código some em alguns minutos: se expirar, gere outro.</p>
+                    <p className="hint">Informe o número com DDI e DDD (ex.: 55 31 99999-9999). O código some em alguns minutos: se expirar, gere outro. Se o WhatsApp disser que o código é inválido, tente o número sem o 9 depois do DDD (números antigos ficam registrados assim).</p>
                   </>
                 ) : (
                   <>
